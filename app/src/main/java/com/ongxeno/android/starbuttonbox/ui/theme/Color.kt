@@ -2,19 +2,19 @@ package com.ongxeno.android.starbuttonbox.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val OrangeDarkPrimary = Color(0xFFFF8C00) // DarkOrange - Primary Accent
+val GreyDarkSecondary = Color(0xFF616161) // Grey 700 - Secondary Accent
+val GreyDarkTertiary = Color(0xFF757575) // Grey 600 - Tertiary Accent (Optional)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Common Dark Theme Background/Surface Colors
+val DarkBackground = Color(0xFF121212) // Very dark grey, near black
+val DarkSurface = Color(0xFF1E1E1E) // Slightly lighter dark grey for surfaces
+val DarkOnError = Color(0xFFCF6679) // Standard Material dark error color
 
-val ButtonColor = Color(0xFF444444)
-val ButtonTextColor = Color.White
-val ToggleOnColor = Color(0xFF008800) // Green when active
-
-val SafetyLockedColor = Color(0xFF880000) // Red background when locked
-val SafetyNormalColor = Color(0xFF444444) // Normal button color (target of fade)
-val SafetyLockedBorder = Color.Yellow // Default border when locked/arming
-val SafetyUnlockedBorder = Color.Green // Border when unlocked/ready
+// Common "On" Colors for Dark Theme (Text/Icons on top of other colors)
+val OnDarkPrimary = Color.Black // Black text/icons on Orange primary
+val OnDarkSecondary = Color.White // White text/icons on Grey secondary
+val OnDarkTertiary = Color.White // White text/icons on Grey tertiary
+val OnDarkBackground = Color(0xFFE1E1E1) // Light grey text/icons on dark background
+val OnDarkSurface = Color(0xFFE1E1E1) // Light grey text/icons on dark surface
+val OnDarkError = Color.Black // Black text/icons on error color

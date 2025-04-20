@@ -17,18 +17,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ongxeno.android.starbuttonbox.ui.theme.ButtonColor
-import com.ongxeno.android.starbuttonbox.ui.theme.ButtonTextColor
-import com.ongxeno.android.starbuttonbox.ui.theme.ToggleOnColor
+import com.ongxeno.android.starbuttonbox.ui.theme.GreyDarkSecondary
+import com.ongxeno.android.starbuttonbox.ui.theme.OnDarkSurface
+import com.ongxeno.android.starbuttonbox.ui.theme.OrangeDarkPrimary
 import kotlinx.coroutines.launch
 
 @Composable
 fun TimedFeedbackButton(
     text: String,
     modifier: Modifier = Modifier,
-    feedbackColor: Color = ToggleOnColor, // Color to start fade from
-    defaultColor: Color = ButtonColor,   // Color to fade back to
-    textColor: Color = ButtonTextColor,
+    feedbackColor: Color = OrangeDarkPrimary, // Color to start fade from
+    defaultColor: Color = GreyDarkSecondary,   // Color to fade back to
+    textColor: Color = OnDarkSurface,
     feedbackDurationMs: Long = 3000L,    // Duration of the fade animation
     onClick: () -> Unit                   // Action to perform on click
 ) {

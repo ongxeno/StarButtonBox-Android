@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,23 +16,25 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Diamond
+import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -44,7 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -54,6 +56,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
+import com.ongxeno.android.starbuttonbox.ui.model.TabInfo
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
 
 class MainActivity : ComponentActivity() {
@@ -91,7 +94,8 @@ class MainActivity : ComponentActivity() {
  */
 @Composable
 private fun HideSystemBarsEffect() {
-    val lifecycleOwner = LocalLifecycleOwner.current // Use platform version
+    // Use the correct LocalLifecycleOwner from lifecycle-runtime-compose
+    val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
 
     DisposableEffect(lifecycleOwner) {
@@ -146,9 +150,38 @@ fun StarCitizenButtonBoxApp() {
         Unit
     }
 
+    // --- Define Tabs using TabInfo ---
+    val tabItems = remember { // Remember the list to avoid recreation
+        listOf(
+            TabInfo(
+                order = 0,
+                title = "Normal Flight",
+                icon = Icons.Filled.Flight,
+                content = { onCommand -> NormalFlightLayout(onCommand) }
+            ),
+            TabInfo(
+                order = 1,
+                title = "Salvage",
+                icon = Icons.Filled.Recycling,
+                content = { PlaceholderLayout("Salvage Layout Placeholder") } // Pass placeholder directly
+            ),
+            TabInfo(
+                order = 2,
+                title = "Mining",
+                icon = Icons.Filled.Diamond,
+                content = { PlaceholderLayout("Mining Layout Placeholder") }
+            ),
+            TabInfo(
+                order = 3,
+                title = "Combat",
+                icon = Icons.Filled.MyLocation,
+                content = { PlaceholderLayout("Combat Layout Placeholder") }
+            )
+        )
+    }
+
     // --- Tab State ---
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Normal Flight", "Salvage", "Mining", "Combat")
 
     // --- Main UI Structure ---
     Column(modifier = Modifier
@@ -160,35 +193,35 @@ fun StarCitizenButtonBoxApp() {
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
                 .padding(start = 8.dp, end = 8.dp)
-                .background(Color.DarkGray.copy(alpha = 0.5f)),
+                .background(Color.DarkGray.copy(alpha = 0.5f))
+                // Ensure the Row has a defined height, e.g., 56.dp
+                .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Scrollable Tabs
-            ScrollableTabRow(
-                selectedTabIndex = selectedTabIndex,
-                modifier = Modifier.weight(1f),
-                edgePadding = 0.dp,
-                indicator = { tabPositions ->
-                    if (selectedTabIndex < tabPositions.size) {
-                        // Use TabRowDefaults.Indicator directly
-                        TabRowDefaults.Indicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                            color = MaterialTheme.colorScheme.primary
+            // Scrollable Tabs - Use Row instead of ScrollableTabRow for IconButtons
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()) // Make the Row scrollable
+            ) {
+                // Iterate through the TabInfo list
+                tabItems.forEachIndexed { index, tabInfo ->
+                    // Use IconButton for better size control
+                    IconButton(
+                        onClick = { selectedTabIndex = index },
+                        modifier = Modifier.size(72.dp) // Control size directly
+                    ) {
+                        Icon(
+                            imageVector = tabInfo.icon,
+                            contentDescription = tabInfo.title,
+                            // Change tint based on selection
+                            tint = if (selectedTabIndex == index) MaterialTheme.colorScheme.primary
+                            else Color.White
                         )
                     }
-                },
-                divider = {}
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { selectedTabIndex = index },
-                        text = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
                 }
             }
+
 
             // Settings Button
             IconButton(onClick = {
@@ -197,7 +230,7 @@ fun StarCitizenButtonBoxApp() {
                 Icon(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = "Settings",
-                    tint = MaterialTheme.colorScheme.onSurface
+                    tint = Color.White
                 )
             }
         }
@@ -210,19 +243,18 @@ fun StarCitizenButtonBoxApp() {
                 .padding(horizontal = 8.dp, vertical = 8.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Content based on selected tab
-            when (selectedTabIndex) {
-                0 -> NormalFlightLayout(handleCommand) // Use imported composable
-                1 -> PlaceholderLayout("Salvage Layout Placeholder")
-                2 -> PlaceholderLayout("Mining Layout Placeholder")
-                3 -> PlaceholderLayout("Combat Layout Placeholder")
+            // Display content based on selected tab's Composable lambda
+            if (selectedTabIndex >= 0 && selectedTabIndex < tabItems.size) {
+                val selectedTab = tabItems[selectedTabIndex]
+                selectedTab.content(handleCommand) // Invoke the content lambda
+            } else {
+                PlaceholderLayout("Error: Invalid Tab")
             }
         }
     }
 }
 
-// NormalFlightLayout function definition removed from here
-
+// PlaceholderLayout remains the same
 @Composable
 fun PlaceholderLayout(title: String) {
     Box(

@@ -8,16 +8,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ongxeno.android.starbuttonbox.ui.theme.ButtonColor
-import com.ongxeno.android.starbuttonbox.ui.theme.ButtonTextColor
+import com.ongxeno.android.starbuttonbox.ui.theme.GreyDarkSecondary
+import com.ongxeno.android.starbuttonbox.ui.theme.OnDarkSurface
 
 
 @Composable
 fun MomentaryButton(
     text: String,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = ButtonColor,
-    textColor: Color = ButtonTextColor,
+    backgroundColor: Color = GreyDarkSecondary,
+    textColor: Color = OnDarkSurface,
     onClick: () -> Unit
 ) {
     Button(
