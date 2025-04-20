@@ -3,81 +3,142 @@ package com.ongxeno.android.starbuttonbox
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
-import com.ongxeno.android.starbuttonbox.ui.button.CombatSystemsBlock
-import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
-import com.ongxeno.android.starbuttonbox.ui.button.SafetyButton
-import com.ongxeno.android.starbuttonbox.ui.button.TimedFeedbackButton
+import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         enableEdgeToEdge()
+        // Initial hide, effect will manage re-hiding on resume
+        hideSystemBars()
+
         setContent {
+            HideSystemBarsEffect() // Apply immersive effect
             StarButtonBoxTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    StarCitizenButtonBoxUi()
+                    StarCitizenButtonBoxApp()
                 }
             }
         }
     }
+
+    // Helper to initially hide system bars
+    private fun hideSystemBars() {
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+        windowInsetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+    }
 }
 
+/**
+ * Composable effect to manage hiding system bars based on lifecycle.
+ */
 @Composable
-fun StarCitizenButtonBoxUi() {
+private fun HideSystemBarsEffect() {
+    val lifecycleOwner = LocalLifecycleOwner.current // Use platform version
+    val context = LocalContext.current
+
+    DisposableEffect(lifecycleOwner) {
+        val window = (context as? ComponentActivity)?.window ?: return@DisposableEffect onDispose {}
+        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                windowInsetsController.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+
+        // Apply initial state when effect runs
+        windowInsetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+}
+
+
+@Composable
+fun StarCitizenButtonBoxApp() {
     val context = LocalContext.current
 
     // --- Network Configuration ---
-    val targetIpAddress = "192.168.50.102"
+    val targetIpAddress = "192.168.50.102" // TODO: Make configurable?
     val targetPort = 5005
 
+    // Remember UdpSender instance
     val udpSender = remember {
         UdpSender(targetIpAddress, targetPort)
     }
 
-    val sendCommand = { command: Command ->
+    // Command handler lambda
+    val handleCommand = { command: Command ->
         udpSender.sendCommandAction(command)
-
-        val feedbackText = command.commandString
+        // UI Feedback (Toast)
         Handler(Looper.getMainLooper()).post {
-            Toast.makeText(context, "Sent: $feedbackText", Toast.LENGTH_SHORT).apply {
+            Toast.makeText(context, "Sent: ${command.commandString}", Toast.LENGTH_SHORT).apply {
                 show()
                 Handler(Looper.getMainLooper()).postDelayed({ this.cancel() }, 500)
             }
@@ -85,195 +146,91 @@ fun StarCitizenButtonBoxUi() {
         Unit
     }
 
-    Column(
+    // --- Tab State ---
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf("Normal Flight", "Salvage", "Mining", "Combat")
+
+    // --- Main UI Structure ---
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .background(Color.Black)) {
+        // Top Bar Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+                .padding(start = 8.dp, end = 8.dp)
+                .background(Color.DarkGray.copy(alpha = 0.5f)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Scrollable Tabs
+            ScrollableTabRow(
+                selectedTabIndex = selectedTabIndex,
+                modifier = Modifier.weight(1f),
+                edgePadding = 0.dp,
+                indicator = { tabPositions ->
+                    if (selectedTabIndex < tabPositions.size) {
+                        // Use TabRowDefaults.Indicator directly
+                        TabRowDefaults.Indicator(
+                            Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                divider = {}
+            ) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            // Settings Button
+            IconButton(onClick = {
+                Toast.makeText(context, "Settings Clicked", Toast.LENGTH_SHORT).show()
+            }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Settings",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        // Content Area Column
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Content based on selected tab
+            when (selectedTabIndex) {
+                0 -> NormalFlightLayout(handleCommand) // Use imported composable
+                1 -> PlaceholderLayout("Salvage Layout Placeholder")
+                2 -> PlaceholderLayout("Mining Layout Placeholder")
+                3 -> PlaceholderLayout("Combat Layout Placeholder")
+            }
+        }
+    }
+}
+
+// NormalFlightLayout function definition removed from here
+
+@Composable
+fun PlaceholderLayout(title: String) {
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black) // Dark background
-            .padding(8.dp)
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
     ) {
-        // --- TOP ROW: Startup/Systems & Emergency ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top
-        ) {
-            // Startup & Systems Block
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("SYSTEMS", color = Color.Gray, fontSize = 10.sp)
-                Row {
-                    MomentaryButton(text = "FLT RDY", modifier = Modifier.weight(1f)) {
-                        sendCommand(Command.GeneralCockpit.FlightReady)
-                    }
-                    TimedFeedbackButton(
-                        text = "ENGINES",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.PowerManagement.TogglePowerEngines) }
-                }
-                Row {
-                    TimedFeedbackButton(
-                        text = "LIGHTS",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Flight.ToggleHeadLight) }
-                    TimedFeedbackButton(
-                        text = "DOORS",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.GeneralCockpit.ToggleAllDoors) }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp)) // Gap between blocks
-
-            Column(
-                modifier = Modifier
-                    .weight(0.6f)
-                    .padding(horizontal = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("EMERGENCY", color = Color.Gray, fontSize = 10.sp)
-                Spacer(modifier = Modifier.height(8.dp)) // Space between title and button row
-
-                Row( // *** Use Row for side-by-side layout ***
-                    modifier = Modifier.fillMaxWidth(), // Let the Row take the available width
-                    horizontalArrangement = Arrangement.spacedBy(8.dp), // Adds space between items in the Row
-                    verticalAlignment = Alignment.CenterVertically // Align items vertically if heights differ slightly
-                ) {
-                    SafetyButton(
-                        text = "EJECT",
-                        modifier = Modifier.weight(1f), // <<< Make buttons share width equally
-                        onSafeClick = { sendCommand(Command.GeneralCockpit.Eject) }
-                        // ... other parameters ...
-                    )
-
-                    // Spacer(Modifier.width(8.dp)) // No longer needed if using Arrangement.spacedBy
-
-                    SafetyButton(
-                        text = "S/DEST",
-                        modifier = Modifier.weight(1f), // <<< Make buttons share width equally
-                        // coverColor = Color(0xFFDDDD00), // Optional styling
-                        // actionButtonColor = Color(0xFF660000), // Optional styling
-                        onSafeClick = { sendCommand(Command.GeneralCockpit.SelfDestruct) }
-                        // ... other parameters ...
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- MIDDLE ROW: Flight Modes & Targeting ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top
-        ) {
-            // Flight Modes Block
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("FLIGHT MODES", color = Color.Gray, fontSize = 10.sp)
-                Row {
-                    TimedFeedbackButton(
-                        text = "DECOUPLE",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Flight.ToggleDecoupledMode) }
-                    TimedFeedbackButton(
-                        text = "VTOL",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Flight.ToggleVTOLMode) }
-                }
-                Row {
-                    TimedFeedbackButton(
-                        text = "CRUISE",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Flight.ToggleCruiseControl) }
-                    TimedFeedbackButton(
-                        text = "SPD LIM",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Flight.ToggleSpeedLimiter) }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Targeting Block
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("TARGETING", color = Color.Gray, fontSize = 10.sp)
-                Row {
-                    MomentaryButton(
-                        text = "TGT HOST",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Targeting.CycleLockHostilesClosest) }
-                    MomentaryButton(
-                        text = "TGT FRND",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Targeting.CycleLockFriendliesClosest) }
-                }
-                Row {
-                    MomentaryButton(text = "PIN TGT", modifier = Modifier.weight(1f)) {
-                        sendCommand(Command.Targeting.LockSelectedTarget)
-                    }
-                    MomentaryButton(text = "SUB RST", modifier = Modifier.weight(1f)) {
-                        sendCommand(Command.Targeting.ResetSubtargetToMain)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- BOTTOM ROW: Nav/Scan/Landing & CM/Power ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top
-        ) {
-            // Nav/Scan/Landing Block
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("NAVIGATION / LANDING", color = Color.Gray, fontSize = 10.sp)
-                Row {
-                    MomentaryButton(
-                        text = "QT SPOOL",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.QuantumTravel.ToggleQuantumMode) }
-                    MomentaryButton(
-                        text = "QT ENGAGE",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.QuantumTravel.ActivateQuantumTravel) }
-                }
-                Row {
-                    TimedFeedbackButton(
-                        text = "SCAN MODE",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Scanning.ToggleScanningMode) }
-                    MomentaryButton(
-                        text = "SCAN PING",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.Scanning.ActivatePing) }
-                }
-                Row {
-                    TimedFeedbackButton(
-                        text = "GEAR",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.LandingAndDocking.ToggleLandingGear) }
-                    MomentaryButton(
-                        text = "ATC",
-                        modifier = Modifier.weight(1f)
-                    ) { sendCommand(Command.LandingAndDocking.RequestLandingTakeoff) }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Countermeasures & Power Block
-            CombatSystemsBlock(sendCommand)
-        }
-        // Add more rows/columns if needed
+        Text(text = title, style = MaterialTheme.typography.headlineMedium, color = Color.White)
     }
 }
