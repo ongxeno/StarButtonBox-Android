@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ongxeno.android.starbuttonbox.data.Command
+import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.button.CombatSystemsBlock
 import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.button.SafetyButton
@@ -60,34 +63,23 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun StarCitizenButtonBoxUi() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope() // Scope for launching background tasks
 
     // --- Network Configuration ---
     val targetIpAddress = "192.168.50.102"
     val targetPort = 5005
 
-    val sendCommand = { command: String ->
-        // Launch network operation in background using IO Dispatcher
-        scope.launch(Dispatchers.IO) {
-            var socket: DatagramSocket? = null
-            try {
-                socket = DatagramSocket() // Create UDP socket
-                val address: InetAddress = InetAddress.getByName(targetIpAddress)
-                val data: ByteArray = command.toByteArray(Charsets.UTF_8)
-                val packet = DatagramPacket(data, data.size, address, targetPort)
+    val udpSender = remember {
+        UdpSender(targetIpAddress, targetPort)
+    }
 
-                socket.send(packet)
+    val sendCommand = { command: Command ->
+        udpSender.sendCommandAction(command)
 
-                Log.d("ButtonBoxNetwork", "Sent '$command' to $targetIpAddress:$targetPort")
-
-                Toast.makeText(context, "Sent $command", Toast.LENGTH_SHORT).apply {
-                    show()
-                    Handler(Looper.getMainLooper()).postDelayed({ this.cancel() }, 500)
-                }
-            } catch (e: Exception) {
-                Log.e("ButtonBoxNetwork", "Error sending UDP packet", e)
-            } finally {
-                socket?.close()
+        val feedbackText = command.commandString
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(context, "Sent: $feedbackText", Toast.LENGTH_SHORT).apply {
+                show()
+                Handler(Looper.getMainLooper()).postDelayed({ this.cancel() }, 500)
             }
         }
         Unit
@@ -112,24 +104,22 @@ fun StarCitizenButtonBoxUi() {
                 Text("SYSTEMS", color = Color.Gray, fontSize = 10.sp)
                 Row {
                     MomentaryButton(text = "FLT RDY", modifier = Modifier.weight(1f)) {
-                        sendCommand(
-                            "FlightReady"
-                        )
+                        sendCommand(Command.GeneralCockpit.FlightReady)
                     }
                     TimedFeedbackButton(
                         text = "ENGINES",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Engines") }
+                    ) { sendCommand(Command.PowerManagement.TogglePowerEngines) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "LIGHTS",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Lights") }
+                    ) { sendCommand(Command.Flight.ToggleHeadLight) }
                     TimedFeedbackButton(
                         text = "DOORS",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Doors") }
+                    ) { sendCommand(Command.GeneralCockpit.ToggleAllDoors) }
                 }
             }
 
@@ -152,7 +142,7 @@ fun StarCitizenButtonBoxUi() {
                     SafetyButton(
                         text = "EJECT",
                         modifier = Modifier.weight(1f), // <<< Make buttons share width equally
-                        onSafeClick = { sendCommand("Eject") }
+                        onSafeClick = { sendCommand(Command.GeneralCockpit.Eject) }
                         // ... other parameters ...
                     )
 
@@ -163,7 +153,7 @@ fun StarCitizenButtonBoxUi() {
                         modifier = Modifier.weight(1f), // <<< Make buttons share width equally
                         // coverColor = Color(0xFFDDDD00), // Optional styling
                         // actionButtonColor = Color(0xFF660000), // Optional styling
-                        onSafeClick = { sendCommand("SelfDestruct") }
+                        onSafeClick = { sendCommand(Command.GeneralCockpit.SelfDestruct) }
                         // ... other parameters ...
                     )
                 }
@@ -187,21 +177,21 @@ fun StarCitizenButtonBoxUi() {
                     TimedFeedbackButton(
                         text = "DECOUPLE",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Decoupled") }
+                    ) { sendCommand(Command.Flight.ToggleDecoupledMode) }
                     TimedFeedbackButton(
                         text = "VTOL",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("VTOL") }
+                    ) { sendCommand(Command.Flight.ToggleVTOLMode) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "CRUISE",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Cruise") }
+                    ) { sendCommand(Command.Flight.ToggleCruiseControl) }
                     TimedFeedbackButton(
                         text = "SPD LIM",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("SpeedLimiter") }
+                    ) { sendCommand(Command.Flight.ToggleSpeedLimiter) }
                 }
             }
 
@@ -217,22 +207,18 @@ fun StarCitizenButtonBoxUi() {
                     MomentaryButton(
                         text = "TGT HOST",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Target_Hostile_Nearest") }
+                    ) { sendCommand(Command.Targeting.CycleLockHostilesClosest) }
                     MomentaryButton(
                         text = "TGT FRND",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Target_Friendly_Nearest") }
+                    ) { sendCommand(Command.Targeting.CycleLockFriendliesClosest) }
                 }
                 Row {
                     MomentaryButton(text = "PIN TGT", modifier = Modifier.weight(1f)) {
-                        sendCommand(
-                            "Target_Pin"
-                        )
+                        sendCommand(Command.Targeting.LockSelectedTarget)
                     }
                     MomentaryButton(text = "SUB RST", modifier = Modifier.weight(1f)) {
-                        sendCommand(
-                            "Target_Subcomponent_Reset"
-                        )
+                        sendCommand(Command.Targeting.ResetSubtargetToMain)
                     }
                 }
             }
@@ -255,31 +241,31 @@ fun StarCitizenButtonBoxUi() {
                     MomentaryButton(
                         text = "QT SPOOL",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Quantum_Spool") }
+                    ) { sendCommand(Command.QuantumTravel.ToggleQuantumMode) }
                     MomentaryButton(
                         text = "QT ENGAGE",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Quantum_Engage") }
+                    ) { sendCommand(Command.QuantumTravel.ActivateQuantumTravel) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "SCAN MODE",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("ScanMode") }
+                    ) { sendCommand(Command.Scanning.ToggleScanningMode) }
                     MomentaryButton(
                         text = "SCAN PING",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Scan_Ping") }
+                    ) { sendCommand(Command.Scanning.ActivatePing) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "GEAR",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("LandingGear") }
+                    ) { sendCommand(Command.LandingAndDocking.ToggleLandingGear) }
                     MomentaryButton(
                         text = "ATC",
                         modifier = Modifier.weight(1f)
-                    ) { sendCommand("Request_Landing") }
+                    ) { sendCommand(Command.LandingAndDocking.RequestLandingTakeoff) }
                 }
             }
 
