@@ -21,8 +21,7 @@ fun ComponentPowerControl(
     componentName: String,
     onIncrease: () -> Unit,
     onDecrease: () -> Unit,
-    // Changed from onToggle: (Boolean) -> Unit
-    onActionClick: () -> Unit // Action for the middle button
+    onActionClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -46,12 +45,10 @@ fun ComponentPowerControl(
             )
             Spacer(Modifier.height(4.dp))
 
-            // *** Use TimedFeedbackButton instead of ToggleButton ***
             TimedFeedbackButton(
-                text = "TOGGLE", // Or specific action name if preferred
+                text = "TOGGLE",
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                onClick = onActionClick // Pass the simple onClick lambda
-                // feedbackColor and defaultColor will use defaults unless specified
+                onClick = onActionClick
             )
 
             Spacer(Modifier.height(4.dp))

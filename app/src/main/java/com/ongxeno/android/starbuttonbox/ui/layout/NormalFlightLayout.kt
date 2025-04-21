@@ -21,17 +21,17 @@ import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.button.SafetyButton
 import com.ongxeno.android.starbuttonbox.ui.button.TimedFeedbackButton
 
-/**
- * Composable function defining the layout for the "Normal Flight" tab.
- *
- * @param onCommand Lambda function to call when a command should be sent.
- */
+
 @Composable
-fun NormalFlightLayout(onCommand: (Command) -> Unit) { // Accept lambda
-    Column { // Removed fillMaxSize and background - handled by parent
-        // --- TOP ROW: Startup/Systems & Emergency ---
+fun NormalFlightLayout(onCommand: (Command) -> Unit) {
+    Column(
+        modifier = Modifier.padding(16.dp)
+    ) {
+        // --- TOP ROW ---
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth(),
+
             verticalAlignment = Alignment.Top
         ) {
             // Startup & Systems Block
@@ -42,18 +42,18 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) { // Accept lambda
                 Text("SYSTEMS", color = Color.Gray, fontSize = 10.sp)
                 Row {
                     MomentaryButton(text = "FLT RDY", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.GeneralCockpit.FlightReady) // Use lambda
+                        onCommand(Command.GeneralCockpit.FlightReady)
                     }
                     TimedFeedbackButton(
                         text = "ENGINES",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.PowerManagement.TogglePowerEngines) } // Use lambda
+                    ) { onCommand(Command.PowerManagement.TogglePowerEngines) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "LIGHTS",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleHeadLight) } // Use lambda
+                    ) { onCommand(Command.Flight.ToggleHeadLight) }
                     TimedFeedbackButton(
                         text = "DOORS",
                         modifier = Modifier.weight(1f)
@@ -81,17 +81,17 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) { // Accept lambda
                     SafetyButton(
                         text = "EJECT",
                         modifier = Modifier.weight(1f),
-                        onSafeClick = { onCommand(Command.GeneralCockpit.Eject) } // Use lambda
+                        onSafeClick = { onCommand(Command.GeneralCockpit.Eject) }
                     )
                     SafetyButton(
                         text = "S/DEST",
                         modifier = Modifier.weight(1f),
-                        onSafeClick = { onCommand(Command.GeneralCockpit.SelfDestruct) } // Use lambda
+                        onSafeClick = { onCommand(Command.GeneralCockpit.SelfDestruct) }
                     )
                 }
             }
         }
-
+        // --- MIDDLE ROW ---
         Spacer(modifier = Modifier.height(16.dp))
 
         // --- MIDDLE ROW: Flight Modes & Targeting ---
@@ -109,17 +109,17 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) { // Accept lambda
                     TimedFeedbackButton(
                         text = "DECOUPLE",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleDecoupledMode) } // Use lambda
+                    ) { onCommand(Command.Flight.ToggleDecoupledMode) }
                     TimedFeedbackButton(
                         text = "VTOL",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleVTOLMode) } // Use lambda
+                    ) { onCommand(Command.Flight.ToggleVTOLMode) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "CRUISE",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleCruiseControl) } // Use lambda
+                    ) { onCommand(Command.Flight.ToggleCruiseControl) }
                     TimedFeedbackButton(
                         text = "SPD LMT",
                         modifier = Modifier.weight(1f)
@@ -139,31 +139,31 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) { // Accept lambda
                     MomentaryButton(
                         text = "TGT HOST",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Targeting.CycleLockHostilesNext) } // Use lambda
+                    ) { onCommand(Command.Targeting.CycleLockHostilesNext) }
                     MomentaryButton(
                         text = "TGT FRND",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Targeting.CycleLockFriendliesNext) } // Use lambda
+                    ) { onCommand(Command.Targeting.CycleLockFriendliesNext) }
                 }
                 Row {
                     MomentaryButton(text = "PIN TGT", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.PinTarget1) // Use lambda
+                        onCommand(Command.Targeting.PinTarget1)
                     }
                     MomentaryButton(text = "SUB RST", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.ResetSubtargetToMain) // Use lambda
+                        onCommand(Command.Targeting.ResetSubtargetToMain)
                     }
                 }
                 Row {
                     MomentaryButton(text = "SUB CYC", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.CycleLockSubtargetsNext) // Use lambda
+                        onCommand(Command.Targeting.CycleLockSubtargetsNext)
                     }
                     MomentaryButton(text = "UNLOCK", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.UnlockLockedTarget) // Use lambda
+                        onCommand(Command.Targeting.UnlockLockedTarget)
                     }
                 }
             }
         }
-
+        // --- BOTTOM ROW ---
         Spacer(modifier = Modifier.height(16.dp))
 
         // --- BOTTOM ROW: Nav/Scan/Landing & CM/Power ---
@@ -181,38 +181,38 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) { // Accept lambda
                     MomentaryButton(
                         text = "QT SPOOL",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.QuantumTravel.ToggleQuantumMode) } // Use lambda
+                    ) { onCommand(Command.QuantumTravel.ToggleQuantumMode) }
                     MomentaryButton(
                         text = "QT ENGAGE",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.QuantumTravel.ActivateQuantumTravel) } // Use lambda
+                    ) { onCommand(Command.QuantumTravel.ActivateQuantumTravel) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "SCAN MODE",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Scanning.ToggleScanningMode) } // Use lambda
+                    ) { onCommand(Command.Scanning.ToggleScanningMode) }
                     MomentaryButton(
                         text = "SCAN PING",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Scanning.ActivatePing) } // Use lambda
+                    ) { onCommand(Command.Scanning.ActivatePing) }
                 }
                 Row {
                     TimedFeedbackButton(
                         text = "GEAR",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.LandingAndDocking.ToggleLandingGear) } // Use lambda
+                    ) { onCommand(Command.LandingAndDocking.ToggleLandingGear) }
                     MomentaryButton(
                         text = "ATC",
                         modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.LandingAndDocking.RequestLandingTakeoff) } // Use lambda
+                    ) { onCommand(Command.LandingAndDocking.RequestLandingTakeoff) }
                 }
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
             // Countermeasures & Power Block
-            CombatSystemsBlock(onCommand) // Pass the lambda down
+            CombatSystemsBlock(onCommand)
         }
     }
 }

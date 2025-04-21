@@ -1,23 +1,39 @@
 package com.ongxeno.android.starbuttonbox.ui.button
 
 import android.util.Log
-import androidx.compose.animation.core.exponentialDecay // For decay spec
-import androidx.compose.animation.core.tween // For snap/settle spec
-import androidx.compose.foundation.ExperimentalFoundationApi // Correct OptIn
+import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
-import androidx.compose.foundation.gestures.snapTo
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape // Explicit import
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -25,64 +41,60 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.*
+import com.ongxeno.android.starbuttonbox.ui.theme.ActionButtonColor
+import com.ongxeno.android.starbuttonbox.ui.theme.GreyDarkSecondary
+import com.ongxeno.android.starbuttonbox.ui.theme.OnDarkSurface
+import com.ongxeno.android.starbuttonbox.ui.theme.OrangeDarkPrimary
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-// Define states for the cover's position
 @OptIn(ExperimentalFoundationApi::class)
 private enum class CoverSlideState {
-    CLOSED, // Cover is down
-    OPEN    // Cover is up
+    CLOSED,
+    OPEN
 }
-
-// Default colors (adjust as needed)
-private val CoverColor = Color(0xFFFFA500) // Orange cover like some safety switches
-private val ActionButtonColor = Color(0xFF880000) // Red action button
-private val ButtonTextColor = Color.White
-private val FrameColor = Color.DarkGray // Background for the whole component
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SafetyButton(
-    text: String, // Text for the action button
+    text: String,
     modifier: Modifier = Modifier,
-    totalHeight: Dp = 100.dp, // Re-added totalHeight parameter for fixed size
-    coverColor: Color = CoverColor,
+    totalHeight: Dp = 100.dp,
+    coverColor: Color = OrangeDarkPrimary,
     actionButtonColor: Color = ActionButtonColor,
-    textColor: Color = ButtonTextColor,
+    textColor: Color = OnDarkSurface,
     autoCloseDelayMs: Long = 5000L,
     onSafeClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
 
-    // Calculate cover height based on the fixed totalHeight again
     val coverHeightPx = remember(totalHeight, density) { with(density) { (totalHeight / 2).toPx() } }
 
-    // Define anchors (can be defined directly now)
     val anchors = remember(coverHeightPx) {
         DraggableAnchors {
             CoverSlideState.CLOSED at 0f
-            CoverSlideState.OPEN at -coverHeightPx // Use calculated height
+            CoverSlideState.OPEN at -coverHeightPx
         }
     }
 
-    // State for managing the cover's position and animation (now uses fixed anchors)
     val dragState = remember {
         AnchoredDraggableState(
             initialValue = CoverSlideState.CLOSED,
-            anchors = anchors, // Use fixed anchors
+            anchors = anchors,
             positionalThreshold = { distance: Float -> distance * 0.5f },
             velocityThreshold = { with(density) { 100.dp.toPx() } },
-            snapAnimationSpec = tween(), // Animation for settling/snapping
-            decayAnimationSpec = exponentialDecay() // Animation for flinging
+            snapAnimationSpec = tween(),
+            decayAnimationSpec = exponentialDecay()
         )
     }
 
-    // Timeout job state
     var autoCloseJob by remember { mutableStateOf<Job?>(null) }
 
-    // Effect to handle automatic closing and cancellation
     LaunchedEffect(dragState.currentValue, dragState.isAnimationRunning) {
         val target = dragState.targetValue
         val current = dragState.currentValue
@@ -91,10 +103,9 @@ fun SafetyButton(
 
         if (current == CoverSlideState.OPEN && !dragState.isAnimationRunning) {
             Log.d("SlidingCover", "Cover settled OPEN, starting/ensuring auto-close timer.")
-            autoCloseJob?.cancel() // Cancel potentially old job first
+            autoCloseJob?.cancel()
             autoCloseJob = scope.launch {
                 delay(autoCloseDelayMs)
-                // Check again if still open and not animating before closing automatically
                 if (isActive && dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning) {
                     Log.d("SlidingCover", "Auto-close timer finished, initiating slide to CLOSED.")
                     try {
@@ -115,43 +126,35 @@ fun SafetyButton(
         }
     }
 
-    // Ensure job is cancelled when composable leaves screen
     DisposableEffect(Unit) {
         onDispose {
             autoCloseJob?.cancel()
         }
     }
 
-    // Determine button visibility/alpha (logic simplified as coverHeightPx is known)
     val actionButtonAlpha by remember {
         derivedStateOf {
             if (coverHeightPx <= 0f) return@derivedStateOf 0f
-            // Calculate progress based on offset relative to cover height
             val progress = (dragState.requireOffset() / -coverHeightPx).coerceIn(0f, 1f)
-            // Return 0f if offset is NaN (initial state before anchors updated)
             if (progress.isNaN()) 0f else progress
         }
     }
-    // Enable only when fully open and settled
     val isActionEnabled = dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
 
     Box(
         modifier = modifier
-            .height(totalHeight) // Use fixed height for the outer Box
+            .height(totalHeight)
             .clipToBounds()
-            .background(FrameColor)
+            .background(GreyDarkSecondary)
     ) {
-        // --- Action Button (Bottom Layer) ---
         Button(
             onClick = {
                 if (isActionEnabled) {
                     Log.d("SlidingCover", "Action Button Clicked!")
                     onSafeClick()
-                    // Force cover closed immediately after successful click
                     scope.launch {
                         try {
                             delay(500L)
-                            // Use snapTo for instant close after action
                             dragState.animateTo(CoverSlideState.CLOSED)
                         } catch (e: Exception) {
                             Log.e("SlidingCover", "Error during snapTo(CLOSED) after click", e)
@@ -163,15 +166,15 @@ fun SafetyButton(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.5f) // Occupy bottom half
+                .fillMaxHeight(0.5f)
                 .align(Alignment.BottomCenter)
-                .graphicsLayer { alpha = actionButtonAlpha }, // Fade in/out
-            enabled = isActionEnabled, // Enable only when cover is fully open and settled
-            shape = androidx.compose.ui.graphics.RectangleShape, // No rounded corners
+                .graphicsLayer { alpha = actionButtonAlpha },
+            enabled = isActionEnabled,
+            shape = RectangleShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = actionButtonColor,
                 contentColor = textColor,
-                disabledContainerColor = actionButtonColor.copy(alpha = 0.5f), // Dim when disabled
+                disabledContainerColor = actionButtonColor.copy(alpha = 0.5f),
                 disabledContentColor = textColor.copy(alpha = 0.7f)
             ),
             contentPadding = PaddingValues(8.dp)
@@ -183,30 +186,27 @@ fun SafetyButton(
             )
         }
 
-        // --- Sliding Cover (Top Layer) ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.5f) // Occupy visual top half when closed
-                .align(Alignment.BottomCenter) // Start aligned at bottom...
-                .offset { // ...then offset based on drag state
-                    // Use the offset from the draggable state
+                .fillMaxHeight(0.5f)
+                .align(Alignment.BottomCenter)
+                .offset {
                     val currentOffset = try {
-                        dragState.requireOffset() // Get offset or throw if not ready
+                        dragState.requireOffset()
                     } catch (e: IllegalStateException) {
-                        0f // Default to 0f if offset isn't initialized yet
+                        0f
                     }
                     IntOffset(x = 0, y = currentOffset.roundToInt())
                 }
                 .background(coverColor)
-                .anchoredDraggable( // Apply draggable behavior
+                .anchoredDraggable(
                     state = dragState,
                     orientation = Orientation.Vertical
                 )
-                .padding(4.dp), // Optional padding inside cover content area
+                .padding(4.dp),
             contentAlignment = Alignment.Center
         ) {
-            // Content for the cover itself
             Text("COVER", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
         }
     }

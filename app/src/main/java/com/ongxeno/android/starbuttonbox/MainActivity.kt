@@ -3,6 +3,7 @@ package com.ongxeno.android.starbuttonbox
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,12 +19,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -32,9 +31,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +48,17 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.data.Command
+import com.ongxeno.android.starbuttonbox.datasource.ConfigDatasource
 import com.ongxeno.android.starbuttonbox.datasource.TabDatasource
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
+import com.ongxeno.android.starbuttonbox.ui.setting.SettingsDialog
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -117,31 +124,59 @@ private fun HideSystemBarsEffect() {
 @Composable
 fun StarCitizenButtonBoxApp() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // Network Configuration
-    val targetIpAddress = "192.168.50.102" // TODO: Make configurable
-    val targetPort = 5005
+    // --- Datasource Instantiation ---
+    val configDatasource = remember { ConfigDatasource(context.applicationContext) }
 
-    val udpSender = remember {
-        UdpSender(targetIpAddress, targetPort)
+    val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(initialValue = null)
+
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    // LaunchedEffect now keyed only on config values
+    LaunchedEffect(targetNetworkConfig) {
+        val (ip, port) = targetNetworkConfig ?: return@LaunchedEffect
+        // Show dialog if config is null AND the dialog isn't already manually shown
+        if (!showSettingsDialog && (ip == null || port == null)) {
+            Log.d("StarCitizenButtonBoxApp", "Config missing, showing settings dialog automatically.")
+            showSettingsDialog = true
+        }
     }
 
-    val handleCommand = { command: Command ->
-        udpSender.sendCommandAction(command)
-        // Show quick feedback Toast
-        Handler(Looper.getMainLooper()).post {
-            Toast.makeText(context, "Sent: ${command.commandString}", Toast.LENGTH_SHORT).apply {
-                show()
-                Handler(Looper.getMainLooper()).postDelayed({ this.cancel() }, 500)
+    val udpSender: UdpSender? = remember(targetNetworkConfig) {
+        targetNetworkConfig?.let { (ip, port) ->
+            if (ip != null && port != null) {
+                Log.d("UdpSender", "Creating/Updating UdpSender for $ip:$port")
+                UdpSender(ip, port)
+            } else {
+                Log.d("UdpSender", "Config not ready, UdpSender is null")
+                null
             }
+        } ?: run {
+            Log.d("UdpSender", "NetworkConfig is still loading")
+            null
+        }
+    }
+
+    // Command handler lambda - check if sender is available
+    val handleCommand = { command: Command ->
+        if (udpSender != null) {
+            udpSender.sendCommandAction(command)
+        } else {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context, "Settings required", Toast.LENGTH_SHORT).show()
+            }
+            // Attempt to show settings dialog again if sender is null and dialog isn't already showing
+            if (!showSettingsDialog) showSettingsDialog = true
         }
         Unit
     }
 
+    // Tab Definitions and State
     val tabItems = remember { TabDatasource.getTabs() }
     var selectedTabIndex by remember { mutableStateOf(0) }
 
-
+    // --- Main UI Structure ---
     Column(modifier = Modifier
         .fillMaxSize()
         .background(Color.Black)) {
@@ -178,7 +213,7 @@ fun StarCitizenButtonBoxApp() {
 
             // Settings Button
             IconButton(onClick = {
-                Toast.makeText(context, "Settings Clicked", Toast.LENGTH_SHORT).show()
+                showSettingsDialog = true
             }) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
@@ -193,8 +228,6 @@ fun StarCitizenButtonBoxApp() {
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                .padding(vertical = 8.dp) // Removed horizontal padding
-                .verticalScroll(rememberScrollState())
         ) {
             if (selectedTabIndex >= 0 && selectedTabIndex < tabItems.size) {
                 val selectedTab = tabItems[selectedTabIndex]
@@ -203,5 +236,30 @@ fun StarCitizenButtonBoxApp() {
                 PlaceholderLayout("Error: Invalid Tab")
             }
         }
+    }
+
+    // --- Conditionally display the Settings Dialog ---
+    if (showSettingsDialog) {
+        SettingsDialog(
+            onDismissRequest = {
+                targetNetworkConfig?.let { (ip, port) ->
+                    if (ip != null && port != null) {
+                        showSettingsDialog = false
+                    } else {
+                        Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT).show()
+                    }
+                } ?: Toast.makeText(context, "Loading Settings...", Toast.LENGTH_SHORT).show()
+            },
+            onSave = { ip, port ->
+                scope.launch {
+                    configDatasource.saveSettings(ip, port)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Settings Saved", Toast.LENGTH_SHORT).show()
+                        showSettingsDialog = false
+                    }
+                }
+            },
+            networkConfigFlow = configDatasource.networkConfigFlow,
+        )
     }
 }

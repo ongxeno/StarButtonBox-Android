@@ -23,7 +23,7 @@ fun MomentaryButton(
     Button(
         onClick = onClick,
         modifier = modifier
-            .height(IntrinsicSize.Min) // Adjust height as needed
+            .height(IntrinsicSize.Min)
             .padding(4.dp),
         colors = ButtonDefaults.buttonColors(containerColor = backgroundColor),
         contentPadding = PaddingValues(8.dp)
@@ -32,7 +32,7 @@ fun MomentaryButton(
             text = text,
             color = textColor,
             textAlign = TextAlign.Center,
-            fontSize = 12.sp, // Adjust font size
+            fontSize = 12.sp,
             lineHeight = 14.sp
         )
     }

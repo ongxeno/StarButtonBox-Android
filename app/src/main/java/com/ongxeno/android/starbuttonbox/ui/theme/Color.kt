@@ -18,3 +18,5 @@ val OnDarkTertiary = Color.White // White text/icons on Grey tertiary
 val OnDarkBackground = Color(0xFFE1E1E1) // Light grey text/icons on dark background
 val OnDarkSurface = Color(0xFFE1E1E1) // Light grey text/icons on dark surface
 val OnDarkError = Color.Black // Black text/icons on error color
+
+val ActionButtonColor = Color(0xFF880000)

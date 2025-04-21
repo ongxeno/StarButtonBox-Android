@@ -26,16 +26,14 @@ import kotlinx.coroutines.launch
 fun TimedFeedbackButton(
     text: String,
     modifier: Modifier = Modifier,
-    feedbackColor: Color = OrangeDarkPrimary, // Color to start fade from
-    defaultColor: Color = GreyDarkSecondary,   // Color to fade back to
+    feedbackColor: Color = OrangeDarkPrimary,
+    defaultColor: Color = GreyDarkSecondary,
     textColor: Color = OnDarkSurface,
-    feedbackDurationMs: Long = 3000L,    // Duration of the fade animation
-    onClick: () -> Unit                   // Action to perform on click
+    feedbackDurationMs: Long = 3000L,
+    onClick: () -> Unit
 ) {
-    // Use Animatable to control the color animation smoothly
-    // Initialize with the defaultColor
     val animatedColor = remember { Animatable(defaultColor) }
-    val scope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
 
     Button(
         onClick = {
@@ -43,13 +41,11 @@ fun TimedFeedbackButton(
             onClick()
 
             // 2. Start the color fade animation
-            scope.launch {
-                // Immediately snap to the feedback color when pressed
+            coroutineScope.launch {
                 animatedColor.snapTo(feedbackColor)
-                // Animate back to the default color over the specified duration
                 animatedColor.animateTo(
                     targetValue = defaultColor,
-                    animationSpec = tween(durationMillis = feedbackDurationMs.toInt()) // Specify duration
+                    animationSpec = tween(durationMillis = feedbackDurationMs.toInt())
                 )
             }
         },
@@ -57,7 +53,6 @@ fun TimedFeedbackButton(
             .height(IntrinsicSize.Min) // Adjust height as needed
             .padding(4.dp),
         colors = ButtonDefaults.buttonColors(
-            // Use the current value of the animation for the container color
             containerColor = animatedColor.value
         ),
         contentPadding = PaddingValues(8.dp)
@@ -66,7 +61,7 @@ fun TimedFeedbackButton(
             text = text,
             color = textColor,
             textAlign = TextAlign.Center,
-            fontSize = 12.sp, // Adjust font size
+            fontSize = 12.sp,
             lineHeight = 14.sp
         )
     }

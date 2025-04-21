@@ -1,10 +1,12 @@
 package com.ongxeno.android.starbuttonbox.datasource
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Recycling
+import androidx.compose.material.icons.filled.Rocket
 import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.model.TabInfo
@@ -19,13 +21,13 @@ object TabDatasource {
             TabInfo(
                 order = 0,
                 title = "Normal Flight",
-                icon = Icons.Filled.Flight,
+                icon = Icons.Filled.Rocket,
                 content = { onCommand -> NormalFlightLayout(onCommand) }
             ),
             TabInfo(
                 order = 1,
                 title = "Salvage",
-                icon = Icons.Filled.Build,
+                icon = Icons.Filled.Recycling,
                 content = { PlaceholderLayout("Salvage Layout Placeholder") }
             ),
             TabInfo(
@@ -37,7 +39,7 @@ object TabDatasource {
             TabInfo(
                 order = 3,
                 title = "Combat",
-                icon = Icons.Filled.MyLocation,
+                icon = Icons.Filled.LocalFireDepartment,
                 content = { PlaceholderLayout("Combat Layout Placeholder") }
             )
         )

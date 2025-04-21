@@ -1,15 +1,18 @@
 package com.ongxeno.android.starbuttonbox.ui.button
 
-import android.util.Log
-import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,7 +35,6 @@ fun CombatSystemsBlock(
         Text("COMBAT SYSTEMS", color = Color.LightGray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(12.dp))
 
-        // --- Countermeasures (Remains the same) ---
         Text("COUNTERMEASURES", color = Color.Gray, fontSize = 10.sp)
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -45,15 +47,13 @@ fun CombatSystemsBlock(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- Engineering Components ---
         Text("POWER MANAGEMENT", color = Color.Gray, fontSize = 10.sp)
-        Spacer(modifier = Modifier.height(8.dp)) // Add space before the row
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Arrange ComponentPowerControls HORIZONTALLY now
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly, // Distribute components evenly
-            verticalAlignment = Alignment.Top // Align tops if heights differ slightly
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Top
         ) {
             // Each ComponentPowerControl is now a vertical stack, placed side-by-side
             ComponentPowerControl(
