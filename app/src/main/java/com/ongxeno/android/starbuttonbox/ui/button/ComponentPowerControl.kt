@@ -41,7 +41,7 @@ fun ComponentPowerControl(
             MomentaryButton(
                 text = "+",
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                onClick = onIncrease
+                onPress = onIncrease
             )
             Spacer(Modifier.height(4.dp))
 
@@ -55,7 +55,7 @@ fun ComponentPowerControl(
             MomentaryButton(
                 text = "-",
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                onClick = onDecrease
+                onPress = onDecrease
             )
         }
     }

@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider // Import CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +57,8 @@ import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.setting.SettingsDialog
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
+import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer // Import CompositionLocal
+import com.ongxeno.android.starbuttonbox.utils.rememberSoundPlayer // Import rememberSoundPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,13 +71,18 @@ class MainActivity : ComponentActivity() {
         hideSystemBars()
 
         setContent {
-            HideSystemBarsEffect()
+            HideSystemBarsEffect() // Keep this effect
+
+            val soundPlayer = rememberSoundPlayer()
+
             StarButtonBoxTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    StarCitizenButtonBoxApp()
+                CompositionLocalProvider(LocalSoundPlayer provides soundPlayer) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        StarCitizenButtonBoxApp()
+                    }
                 }
             }
         }
@@ -108,6 +116,7 @@ private fun HideSystemBarsEffect() {
             }
         }
 
+        // Initial hide
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
@@ -133,7 +142,6 @@ fun StarCitizenButtonBoxApp() {
 
     var showSettingsDialog by remember { mutableStateOf(false) }
 
-    // LaunchedEffect now keyed only on config values
     LaunchedEffect(targetNetworkConfig) {
         val (ip, port) = targetNetworkConfig ?: return@LaunchedEffect
         // Show dialog if config is null AND the dialog isn't already manually shown
@@ -231,15 +239,18 @@ fun StarCitizenButtonBoxApp() {
         ) {
             if (selectedTabIndex >= 0 && selectedTabIndex < tabItems.size) {
                 val selectedTab = tabItems[selectedTabIndex]
-                selectedTab.content(handleCommand)
+                selectedTab.content(handleCommand) // Pass the command handler
             } else {
-                PlaceholderLayout("Error: Invalid Tab")
+                // Handle invalid tab index gracefully
+                PlaceholderLayout("Error: Invalid Tab Index")
             }
         }
     }
 
     // --- Conditionally display the Settings Dialog ---
     if (showSettingsDialog) {
+        // Ensure networkConfigFlow is passed correctly if needed by SettingsDialog internally
+        // The current SettingsDialog signature takes onSave and onDismiss, and networkConfigFlow
         SettingsDialog(
             onDismissRequest = {
                 targetNetworkConfig?.let { (ip, port) ->
@@ -259,7 +270,7 @@ fun StarCitizenButtonBoxApp() {
                     }
                 }
             },
-            networkConfigFlow = configDatasource.networkConfigFlow,
+            networkConfigFlow = configDatasource.networkConfigFlow, // Pass the flow
         )
     }
 }
