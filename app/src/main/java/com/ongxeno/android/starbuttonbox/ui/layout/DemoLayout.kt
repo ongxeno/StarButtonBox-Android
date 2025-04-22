@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,14 +39,9 @@ fun DemoLayout(modifier: Modifier = Modifier) {
                 onPress = { Log.d("DemoLayout", "MomentaryButton clicked") }
             )
         },
-        DemoButtonInfo("Timed Feedback") {
-            MomentaryButton(
-                text = "Timed",
-                onPress = { Log.d("DemoLayout", "TimedFeedbackButton pressed") },
-            )
-        },
         DemoButtonInfo("Safety") {
             SafetyButton(
+                modifier = Modifier.height(200.dp),
                 text = "Safety",
                 onSafeClick = { Log.d("DemoLayout", "SafetyButton pressed") }
             )
@@ -62,7 +58,7 @@ fun DemoLayout(modifier: Modifier = Modifier) {
 
     // Create a lazy vertical grid with 3 fixed columns
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        columns = GridCells.Adaptive(minSize = 300.dp),
         modifier = modifier
             .fillMaxSize()
             // Set the background of the grid itself to the desired line color
@@ -83,7 +79,7 @@ fun DemoLayout(modifier: Modifier = Modifier) {
                     // Set the background of the cell itself to contrast with the grid lines
                     .background(MaterialTheme.colorScheme.surface)
                     // Apply a fixed height to make all cells even. Adjust value as needed.
-                    .height(250.dp)
+                    .fillMaxHeight(1f)
                     // Apply padding *inside* the cell for the content
                     .padding(vertical = 8.dp, horizontal = 4.dp)
                 // Removed .fillMaxSize() as we now have a fixed height

@@ -12,9 +12,10 @@ import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ButtonDefaults
@@ -24,6 +25,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,9 +37,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,7 +67,6 @@ private enum class CoverSlideState {
 fun SafetyButton(
     text: String,
     modifier: Modifier = Modifier,
-    totalHeight: Dp = 100.dp,
     coverColor: Color = OrangeDarkPrimary,
     actionButtonColor: Color = ActionButtonColor,
     textColor: Color = OnDarkSurface,
@@ -75,13 +76,20 @@ fun SafetyButton(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
 
-    val coverHeightPx =
-        remember(totalHeight, density) { with(density) { (totalHeight / 2).toPx() } }
+    var componentHeightPx by remember { mutableFloatStateOf(0f) }
+
+    val coverHeightPx by remember(componentHeightPx) {
+        derivedStateOf { componentHeightPx / 2f }
+    }
 
     val anchors = remember(coverHeightPx) {
-        DraggableAnchors {
-            CoverSlideState.CLOSED at 0f
-            CoverSlideState.OPEN at -coverHeightPx
+        if (coverHeightPx > 0f) {
+            DraggableAnchors {
+                CoverSlideState.CLOSED at 0f
+                CoverSlideState.OPEN at -coverHeightPx
+            }
+        } else {
+            DraggableAnchors { CoverSlideState.CLOSED at 0f }
         }
     }
 
@@ -96,31 +104,28 @@ fun SafetyButton(
         )
     }
 
+    LaunchedEffect(anchors) {
+        dragState.updateAnchors(anchors)
+    }
+
     var autoCloseTimerJob by remember { mutableStateOf<Job?>(null) }
 
     var momentaryButtonPressed by remember { mutableStateOf(false) }
 
+
     LaunchedEffect(dragState.currentValue, dragState.isAnimationRunning, momentaryButtonPressed) {
-        val isCoverOpenAndSettled =
-            dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
+        val isCoverOpenAndSettled = dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
         val shouldStartTimer = isCoverOpenAndSettled && !momentaryButtonPressed
 
-        Log.d(
-            "SafetyButton",
-            "AutoClose Effect: CoverOpenSettled=$isCoverOpenAndSettled, ButtonPressed=$momentaryButtonPressed, ShouldStartTimer=$shouldStartTimer"
-        )
-
-        if (shouldStartTimer) {
+        // Only start timer if coverHeight is valid (component has been measured)
+        if (shouldStartTimer && coverHeightPx > 0f) {
             Log.d("SafetyButton", "Conditions met. Starting auto-close timer.")
-            autoCloseTimerJob?.cancel() // Cancel previous timer if any
-            autoCloseTimerJob = scope.launch { // This job is JUST the timer
+            autoCloseTimerJob?.cancel()
+            autoCloseTimerJob = scope.launch {
                 delay(autoCloseDelayMs)
-                // Re-check conditions before closing, in case state changed during delay
                 if (isActive && dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning && !momentaryButtonPressed) {
-                    Log.d(
-                        "SafetyButton",
-                        "Auto-close timer finished. Launching separate job to close cover."
-                    )
+
+                    Log.d("SafetyButton", "Auto-close timer finished. Launching separate job to close cover.")
                     // Launch the animation in a SEPARATE job, not tied to autoCloseTimerJob
                     scope.launch {
                         try {
@@ -133,36 +138,27 @@ fun SafetyButton(
                         }
                     }
                 } else {
-                    Log.d(
-                        "SafetyButton",
-                        "Auto-close timer finished, but state changed during delay. Not closing."
-                    )
+                    Log.d("SafetyButton", "Auto-close timer finished, but state changed during delay. Not closing.")
                 }
             }
         } else {
-            // If conditions to start timer are not met, cancel the existing TIMER job.
-            // This will NOT cancel an ongoing animation launched separately above.
-            Log.d(
-                "SafetyButton",
-                "Conditions not met for starting timer OR button pressed. Cancelling auto-close timer job."
-            )
             autoCloseTimerJob?.cancel()
         }
     }
 
     LaunchedEffect(dragState) {
+
         snapshotFlow { dragState.currentValue }
-            .distinctUntilChanged()
-            .filter { it == CoverSlideState.CLOSED }
+            .distinctUntilChanged() // Only react on change
+            .filter { it == CoverSlideState.CLOSED } // Only react when it becomes CLOSED
             .collect {
-                Log.d(
-                    "SafetyButton",
-                    "Cover became CLOSED, resetting momentary button pressed state."
-                )
+                Log.d("SafetyButton", "Cover became CLOSED, ensuring momentary button pressed state is false.")
                 momentaryButtonPressed = false
+                // Also cancel the timer explicitly when cover closes, just in case
                 autoCloseTimerJob?.cancel()
             }
     }
+
 
     DisposableEffect(Unit) {
         onDispose {
@@ -170,81 +166,96 @@ fun SafetyButton(
         }
     }
 
+    val isActionEnabled =
+        dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
     val actionButtonAlpha by remember {
         derivedStateOf {
+            // Prevent division by zero or NaN if measured height isn't available yet
             if (coverHeightPx <= 0f) return@derivedStateOf 0f
-            val progress = (dragState.requireOffset() / -coverHeightPx).coerceIn(0f, 1f)
+            // Use requireOffset safely, default to 0 if calculation is not possible yet
+            val offset = try { dragState.requireOffset() } catch (e: IllegalStateException) { 0f }
+            val progress = (offset / -coverHeightPx).coerceIn(0f, 1f)
             if (progress.isNaN()) 0f else progress
         }
     }
-    val isActionEnabled =
-        dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
+
 
     Box(
         modifier = modifier
-            .height(totalHeight)
             .clipToBounds()
             .background(GreyDarkSecondary)
+            .onSizeChanged { size ->
+                componentHeightPx = size.height.toFloat()
+            }
     ) {
-        MomentaryButton(
-            isPressed = momentaryButtonPressed,
-            onIsPressedChange = { pressed ->
-                momentaryButtonPressed = if (isActionEnabled) pressed else false
-            },
-            onPress = {
-                if (isActionEnabled) {
-                    onSafeClick()
-                }
-            },
-            onRelease = {
-                scope.launch {
-                    try {
-                        delay(500L)
-                        dragState.animateTo(CoverSlideState.CLOSED)
-                    } catch (e: Exception) {
-                        Log.e("SlidingCover", "Error during snapTo(CLOSED) after click", e)
+        // Check if measured height is valid before rendering children that depend on it
+        if (componentHeightPx > 0f) {
+            // --- Momentary Button (Action Button) ---
+            MomentaryButton(
+                // Pass the hoisted state and its update lambda
+                isPressed = momentaryButtonPressed,
+                onIsPressedChange = { pressed ->
+                    momentaryButtonPressed = if (isActionEnabled) pressed else false
+                },
+                onPress = {
+                    if (isActionEnabled) {
+                        Log.d("SlidingCover", "Action Button Clicked!")
+                        onSafeClick()
                     }
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.5f)
-                .align(Alignment.BottomCenter)
-                .graphicsLayer { alpha = actionButtonAlpha },
-            enabled = isActionEnabled,
-            shape = RectangleShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = actionButtonColor,
-                contentColor = textColor,
-                disabledContainerColor = actionButtonColor.copy(alpha = 0.5f),
-                disabledContentColor = textColor.copy(alpha = 0.7f)
-            ),
-            contentPadding = PaddingValues(8.dp),
-            text = text,
-        )
+                },
+                onRelease = {
+                    scope.launch {
+                        try {
+                            delay(500L)
+                            dragState.animateTo(CoverSlideState.CLOSED)
+                        } catch (e: Exception) {
+                            Log.e("SlidingCover", "Error during snapTo(CLOSED) after click", e)
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth() // Takes bottom half
+                    .fillMaxHeight(0.5f)
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer { alpha = actionButtonAlpha },
+                    enabled = isActionEnabled,
+                shape = RectangleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = actionButtonColor,
+                    contentColor = textColor,
+                    disabledContainerColor = actionButtonColor.copy(alpha = 0.5f),
+                    disabledContentColor = textColor.copy(alpha = 0.7f)
+                ),
+                contentPadding = PaddingValues(8.dp),
+                text = text,
+            )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.5f)
-                .align(Alignment.BottomCenter)
-                .offset {
-                    val currentOffset = try {
-                        dragState.requireOffset()
-                    } catch (e: IllegalStateException) {
-                        0f
+            // --- Cover ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()// Takes top half initially
+                    .fillMaxHeight(0.5f)
+                    .align(Alignment.BottomCenter)
+                    .offset {// Align to bottom, offset pushes it up
+                        val currentOffset = try {
+                            dragState.requireOffset()
+                        } catch (e: IllegalStateException) { 0f }
+                        IntOffset(x = 0, y = currentOffset.roundToInt())
                     }
-                    IntOffset(x = 0, y = currentOffset.roundToInt())
-                }
-                .background(coverColor)
-                .anchoredDraggable(
-                    state = dragState,
-                    orientation = Orientation.Vertical
-                )
-                .padding(4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("COVER", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                    .background(coverColor)
+                    .anchoredDraggable(
+                        state = dragState,
+                        orientation = Orientation.Vertical,
+                        enabled = coverHeightPx > 0f
+                    )
+                    .padding(4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("COVER", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            // Optionally show a placeholder or empty space while waiting for measurement
+            Spacer(modifier = Modifier.fillMaxSize())
         }
     }
 }
