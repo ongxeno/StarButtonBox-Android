@@ -1,12 +1,14 @@
 package com.ongxeno.android.starbuttonbox.datasource
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Rocket
 import androidx.compose.material.icons.filled.Widgets
 import com.ongxeno.android.starbuttonbox.ui.layout.DemoLayout
+import com.ongxeno.android.starbuttonbox.ui.layout.FreeFormLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.model.TabInfo
@@ -26,27 +28,34 @@ object TabDatasource {
             ),
             TabInfo(
                 order = 1,
+                title = "Free Form",
+                icon = Icons.Filled.DashboardCustomize,
+                content = { onCommand -> FreeFormLayout(onCommand = onCommand) }
+            ),
+            TabInfo(
+                order = 2,
                 title = "Salvage",
                 icon = Icons.Filled.Recycling,
                 content = { PlaceholderLayout("Salvage Layout Placeholder") }
             ),
             TabInfo(
-                order = 2,
+                order = 3,
                 title = "Mining",
                 icon = Icons.Filled.Diamond,
                 content = { PlaceholderLayout("Mining Layout Placeholder") }
             ),
             TabInfo(
-                order = 3,
+                order = 4,
                 title = "Combat",
                 icon = Icons.Filled.LocalFireDepartment,
                 content = { PlaceholderLayout("Combat Layout Placeholder") }
             ),
             TabInfo(
-                order = 4,
+                order = 5,
                 title = "Demo",
                 icon = Icons.Filled.Widgets,
-                content = { DemoLayout() })
-        )
+                content = { DemoLayout() }
+            )
+        ).sortedBy { it.order }
     }
 }

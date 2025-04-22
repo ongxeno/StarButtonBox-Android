@@ -2,12 +2,16 @@ package com.ongxeno.android.starbuttonbox.data
 
 /**
  * Defines command strings for Star Citizen actions using a sealed class hierarchy.
- * Each nested data object represents a specific command and holds its string value.
+ * Each nested data object represents a specific command and holds its string value
+ * for server communication, and a unique actionName for serialization.
  * Based on Star Citizen Alpha 3.18+ default KBM keybindings and common unbound actions.
+ *
+ * @param commandString The string sent to the server (e.g., "Boost").
+ * @param actionName A unique, stable identifier for serialization (e.g., "Flight.Boost").
  */
-sealed class Command(val commandString: String) {
+sealed class Command(val commandString: String, val actionName: String) {
 
-    sealed class Flight(commandString: String) : Command(commandString) {
+    sealed class Flight(subCommand: String) : Command(subCommand, "Flight.$subCommand") {
         data object Boost : Flight("Boost") // HOLD Left Shift
         data object Spacebrake : Flight("Spacebrake") // X
         data object ToggleDecoupledMode : Flight("ToggleDecoupledMode") // Left Alt + C
@@ -28,31 +32,25 @@ sealed class Command(val commandString: String) {
         data object RollRight : Flight("RollRight") // E
     }
 
-    sealed class QuantumTravel(commandString: String) : Command(commandString) {
+    sealed class QuantumTravel(subCommand: String) : Command(subCommand, "QuantumTravel.$subCommand") {
         data object ToggleQuantumMode : QuantumTravel("ToggleQuantumMode") // Tap B (Spool)
         data object ActivateQuantumTravel : QuantumTravel("ActivateQuantumTravel") // HOLD B (Engage)
         data object CalibrateQuantumDrive : QuantumTravel("CalibrateQuantumDrive") // Tap B (While Spooled) - Same as Toggle? Verify in-game. Using Toggle for now.
         data object SetQuantumRoute : QuantumTravel("SetQuantumRoute") // Requires manual binding or interaction mode
     }
 
-    sealed class LandingAndDocking(commandString: String) : Command(commandString) {
+    sealed class LandingAndDocking(subCommand: String) : Command(subCommand, "LandingAndDocking.$subCommand") {
         data object ToggleLandingGear : LandingAndDocking("ToggleLandingGear") // N
         data object AutoLand : LandingAndDocking("AutoLand") // HOLD N
-        data object RequestLandingTakeoff :
-            LandingAndDocking("RequestLandingTakeoff") // Left Alt + N (ATC)
-
-        data object RequestDocking :
-            LandingAndDocking("RequestDocking") // N (while in Docking Mode) - Often same as Gear toggle contextually
-
+        data object RequestLandingTakeoff : LandingAndDocking("RequestLandingTakeoff") // Left Alt + N (ATC)
+        data object RequestDocking : LandingAndDocking("RequestDocking") // N (while in Docking Mode) - Often same as Gear toggle contextually
         data object ToggleDockingCamera : LandingAndDocking("ToggleDockingCamera") // 0
     }
 
-    sealed class PowerManagement(commandString: String) : Command(commandString) {
+    sealed class PowerManagement(subCommand: String) : Command(subCommand, "PowerManagement.$subCommand") {
         data object TogglePowerWeapons : PowerManagement("TogglePowerWeapons") // P or 1
         data object TogglePowerShields : PowerManagement("TogglePowerShields") // O or 2
-        data object TogglePowerEngines :
-            PowerManagement("TogglePowerEngines") // I or 3 (Previously Thrusters)
-
+        data object TogglePowerEngines : PowerManagement("TogglePowerEngines") // I or 3 (Previously Thrusters)
         data object TogglePowerAll : PowerManagement("TogglePowerAll") // U (Power On/Off)
         data object IncreasePowerWeapons : PowerManagement("IncreasePowerWeapons") // Tap F5
         data object MaxPowerWeapons : PowerManagement("MaxPowerWeapons") // HOLD F5
@@ -61,27 +59,19 @@ sealed class Command(val commandString: String) {
         data object IncreasePowerShields : PowerManagement("IncreasePowerShields") // Tap F7
         data object MaxPowerShields : PowerManagement("MaxPowerShields") // HOLD F7
         data object ResetPowerDistribution : PowerManagement("ResetPowerDistribution") // F8
-        data object DecreasePowerWeapons :
-            PowerManagement("DecreasePowerWeapons") // Tap Left Alt + F5
-
+        data object DecreasePowerWeapons : PowerManagement("DecreasePowerWeapons") // Tap Left Alt + F5
         data object MinPowerWeapons : PowerManagement("MinPowerWeapons") // HOLD Left Alt + F5
-        data object DecreasePowerEngines :
-            PowerManagement("DecreasePowerEngines") // Tap Left Alt + F6
-
+        data object DecreasePowerEngines : PowerManagement("DecreasePowerEngines") // Tap Left Alt + F6
         data object MinPowerEngines : PowerManagement("MinPowerEngines") // HOLD Left Alt + F6
-        data object DecreasePowerShields :
-            PowerManagement("DecreasePowerShields") // Tap Left Alt + F7
-
+        data object DecreasePowerShields : PowerManagement("DecreasePowerShields") // Tap Left Alt + F7
         data object MinPowerShields : PowerManagement("MinPowerShields") // HOLD Left Alt + F7
-
         data object PowerTrianglePresetWeapons : PowerManagement("PowerTrianglePresetWeapons") // F5 (Map to MaxPowerWeapons?)
         data object PowerTrianglePresetEngines : PowerManagement("PowerTrianglePresetEngines") // F6 (Map to MaxPowerEngines?)
         data object PowerTrianglePresetShields : PowerManagement("PowerTrianglePresetShields") // F7 (Map to MaxPowerShields?)
         data object PowerTriangleReset : PowerManagement("PowerTriangleReset") // F8 (Map to ResetPowerDistribution)
-
     }
 
-    sealed class Targeting(commandString: String) : Command(commandString) {
+    sealed class Targeting(subCommand: String) : Command(subCommand, "Targeting.$subCommand") {
         data object LockSelectedTarget : Targeting("LockSelectedTarget") // Tap T
         data object UnlockLockedTarget : Targeting("UnlockLockedTarget") // Left Alt + T
         data object CycleLockHostilesNext : Targeting("CycleLockHostilesNext") // Tap 5
@@ -99,7 +89,6 @@ sealed class Command(val commandString: String) {
         data object PinTarget3 : Targeting("PinTarget3") // Left Alt + 3
         data object RemoveAllPinnedTargets : Targeting("RemoveAllPinnedTargets") // 0 (or Left Alt + 0)
         data object ToggleLookAhead : Targeting("ToggleLookAhead") // Left Alt + L (Often Look Behind?) - Verify
-
         data object TargetNearestHostile : Targeting("TargetNearestHostile") // Tap 5 (Map to CycleLockHostilesNext?)
         data object CycleTargetsForward : Targeting("CycleTargetsForward") // T (Map to LockSelectedTarget?)
         data object CycleTargetsBackward : Targeting("CycleTargetsBackward") // Y (Often unbound, requires manual binding)
@@ -107,41 +96,32 @@ sealed class Command(val commandString: String) {
         data object CycleSubtargetsBackward : Targeting("CycleSubtargetsBackward") // Left Alt + R (Map to ResetSubtargetToMain?) - Verify
         data object PinSelectedTarget : Targeting("PinSelectedTarget") // Left Alt + 1 (Map to PinTarget1)
         data object UnpinSelectedTarget : Targeting("UnpinSelectedTarget") // Left Alt + 0 (Map to RemoveAllPinnedTargets?)
-
     }
 
-    sealed class CombatPilot(commandString: String) : Command(commandString) {
+    sealed class CombatPilot(subCommand: String) : Command(subCommand, "CombatPilot.$subCommand") {
         data object FireWeaponGroup1 : CombatPilot("FireWeaponGroup1") // LMB
         data object FireWeaponGroup2 : CombatPilot("FireWeaponGroup2") // RMB
         data object CycleGimbalMode : CombatPilot("CycleGimbalMode") // Long Press G (or Tap G)
         data object ToggleMissileOperatorMode : CombatPilot("ToggleMissileOperatorMode") // MMB
         data object LaunchMissile : CombatPilot("LaunchMissile") // LMB (in Missile Mode)
-        data object CycleMissileType :
-            CombatPilot("CycleMissileType") // Mouse Wheel (in Missile Mode) or G
-
+        data object CycleMissileType : CombatPilot("CycleMissileType") // Mouse Wheel (in Missile Mode) or G
         data object IncreaseArmedMissiles : CombatPilot("IncreaseArmedMissiles") // Tap G
         data object ResetArmedMissiles : CombatPilot("ResetArmedMissiles") // Left Alt + G
-
         data object CycleFireMode : CombatPilot("CycleFireMode") // V (Often unbound, requires manual binding)
     }
 
-    sealed class Countermeasures(commandString: String) : Command(commandString) {
+    sealed class Countermeasures(subCommand: String) : Command(subCommand, "Countermeasures.$subCommand") {
         data object DeployDecoyPanic : Countermeasures("DeployDecoyPanic") // Tap H (Often just Launch Decoy)
         data object DeployDecoyBurst : Countermeasures("DeployDecoyBurst") // Tap H (Often just Launch Decoy)
         data object SetLaunchDecoyBurst : Countermeasures("SetLaunchDecoyBurst") // Hold H (Often just Launch Decoy)
-        data object IncreaseDecoyBurstSize :
-            Countermeasures("IncreaseDecoyBurstSize") // Right Alt + H
-
-        data object DecreaseDecoyBurstSize :
-            Countermeasures("DecreaseDecoyBurstSize") // Left Alt + H
-
+        data object IncreaseDecoyBurstSize : Countermeasures("IncreaseDecoyBurstSize") // Right Alt + H
+        data object DecreaseDecoyBurstSize : Countermeasures("DecreaseDecoyBurstSize") // Left Alt + H
         data object DeployNoise : Countermeasures("DeployNoise") // J
-
         data object LaunchDecoy : Countermeasures("LaunchDecoy") // H
         data object LaunchNoise : Countermeasures("LaunchNoise") // J (Map to DeployNoise)
     }
 
-    sealed class Scanning(commandString: String) : Command(commandString) {
+    sealed class Scanning(subCommand: String) : Command(subCommand, "Scanning.$subCommand") {
         data object ToggleScanningMode : Scanning("ToggleScanningMode") // V
         data object ActivatePing : Scanning("ActivatePing") // TAB
         data object ActivateScanTargeted : Scanning("ActivateScanTargeted") // LMB (in Scan Mode)
@@ -149,7 +129,7 @@ sealed class Command(val commandString: String) {
         data object DecreaseScanAngleFocus : Scanning("DecreaseScanAngleFocus") // MWD
     }
 
-    sealed class GeneralCockpit(commandString: String) : Command(commandString) {
+    sealed class GeneralCockpit(subCommand: String) : Command(subCommand, "GeneralCockpit.$subCommand") {
         data object FlightReady : GeneralCockpit("FlightReady") // R
         data object ExitSeat : GeneralCockpit("ExitSeat") // Hold Y
         data object Eject : GeneralCockpit("Eject") // Right Alt + Y
@@ -157,16 +137,14 @@ sealed class Command(val commandString: String) {
         data object SelfDestruct : GeneralCockpit("SelfDestruct") // Hold Backspace
         data object TogglePortLockAll : GeneralCockpit("TogglePortLockAll") // Right Alt + K (Lock Vehicle)
         data object ToggleAllDoors : GeneralCockpit("ToggleAllDoors") // Requires manual binding (Often just 'Doors')
-        data object ToggleLockAllDoors :
-            GeneralCockpit("ToggleLockAllDoors") // Requires manual binding (Often just 'Lock')
-
+        data object ToggleLockAllDoors : GeneralCockpit("ToggleLockAllDoors") // Requires manual binding (Often just 'Lock')
         data object OpenAllDoors : GeneralCockpit("OpenAllDoors") // Map to ToggleAllDoors?
         data object CloseAllDoors : GeneralCockpit("CloseAllDoors") // Map to ToggleAllDoors?
         data object LockDoors : GeneralCockpit("LockDoors") // Map to TogglePortLockAll?
         data object UnlockDoors : GeneralCockpit("UnlockDoors") // Map to TogglePortLockAll?
     }
 
-    sealed class ShipSalvage(commandString: String) : Command(commandString) {
+    sealed class ShipSalvage(subCommand: String) : Command(subCommand, "ShipSalvage.$subCommand") {
         data object ToggleSalvageMode : ShipSalvage("ToggleSalvageMode") // M
         data object ToggleSalvageGimbal : ShipSalvage("ToggleSalvageGimbal") // G
         data object ResetSalvageGimbal : ShipSalvage("ResetSalvageGimbal") // Left Alt + G
@@ -188,7 +166,7 @@ sealed class Command(val commandString: String) {
         data object SetAbsoluteSalvageBeamSpacing : ShipSalvage("SetAbsoluteSalvageBeamSpacing") // Requires manual binding
     }
 
-    sealed class ShipMining(commandString: String) : Command(commandString) {
+    sealed class ShipMining(subCommand: String) : Command(subCommand, "ShipMining.$subCommand") {
         data object ToggleMiningMode : ShipMining("ToggleMiningMode") // M
         data object FireMiningLaser : ShipMining("FireMiningLaser") // LMB
         data object SwitchMiningLaser : ShipMining("SwitchMiningLaser") // Left Alt + LMB
@@ -201,7 +179,7 @@ sealed class Command(val commandString: String) {
         data object JettisonCargo : ShipMining("JettisonCargo") // Left Alt + J
     }
 
-    sealed class Turret(commandString: String) : Command(commandString) {
+    sealed class Turret(subCommand: String) : Command(subCommand, "Turret.$subCommand") {
         data object ToggleTurretAimMode : Turret("ToggleTurretAimMode") // Q
         data object RecenterTurret : Turret("RecenterTurret") // Hold C
         data object ChangeTurretPosition : Turret("ChangeTurretPosition") // S
@@ -217,5 +195,39 @@ sealed class Command(val commandString: String) {
         data object SwitchToPreviousRemoteTurret : Turret("SwitchToPreviousRemoteTurret") // A
         data object ExitTurret : Turret("ExitTurret") // Hold Y
         data object ToggleTurretESP : Turret("ToggleTurretESP") // Requires manual binding
+    }
+
+    companion object {
+        private val allCommands: Map<String, Command> by lazy {
+            Command::class.sealedSubclasses
+                .flatMap { categoryClass ->
+                    val categoryObjects = categoryClass.objectInstance?.let { listOf(it as Command) } ?: emptyList()
+                    val subCategoryObjects = categoryClass.nestedClasses
+                        .filter { it.isFinal && it.objectInstance is Command }
+                        .mapNotNull { it.objectInstance as? Command }
+
+                    categoryObjects + subCategoryObjects
+                }
+                .associateBy { it.actionName }
+        }
+
+        /**
+         * Finds and returns a Command object based on its unique actionName string.
+         * Crucial for restoring button state after process death or configuration changes.
+         *
+         * @param actionName The unique string identifier for the command (e.g., "Flight.Boost").
+         * @return The corresponding Command object instance, or null if not found.
+         */
+        fun fromActionName(actionName: String): Command? {
+            return allCommands[actionName]
+        }
+
+        /**
+         * (Optional) Helper to get all defined commands if needed elsewhere.
+         * @return A list of all Command data object instances.
+         */
+        fun getAllCommands(): List<Command> {
+            return allCommands.values.toList()
+        }
     }
 }
