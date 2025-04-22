@@ -4,9 +4,9 @@
 
 This project creates a virtual button box application for the game Star Citizen. It consists of two main parts:
 
-1. **`Android Application (StarButtonBox folder):`** An app built with `Kotlin` and `Jetpack Compose` that serves as the user interface. It displays various buttons organized into tabs (like "Normal Flight") corresponding to in-game actions. When a button is pressed, the app sends the corresponding command over the network using UDP.
+1. **`Android Application:`** An app built with `Kotlin` and `Jetpack Compose` that serves as the user interface. It displays various buttons organized into tabs (like "Normal Flight") corresponding to in-game actions. When a button is pressed, the app sends the corresponding command over the network using UDP.
 
-2. **`Python Server (server.py):`** A Python script intended to run on the PC where Star Citizen is played. It listens for UDP packets from the Android app. Upon receiving a command, it parses the JSON data and uses the `pydirectinput` library to simulate the appropriate keyboard or mouse inputs (including key presses, holds, and modifiers) on the PC.
+2. **`Python Server:`** A Python script intended to run on the PC where Star Citizen is played. It listens for UDP packets from the Android app. Upon receiving a command, it parses the JSON data and uses the `pydirectinput` library to simulate the appropriate keyboard or mouse inputs (including key presses, holds, and modifiers) on the PC.
 
 ## Key Features & Implementation Details
 
