@@ -51,11 +51,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.datasource.ConfigDatasource
+import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource // Import LayoutDatasource
 import com.ongxeno.android.starbuttonbox.datasource.TabDatasource
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.setting.SettingsDialog
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
+import com.ongxeno.android.starbuttonbox.utils.LocalLayoutDatasource // Import the CompositionLocal key
 import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer
 import com.ongxeno.android.starbuttonbox.utils.LocalVibrator
 import com.ongxeno.android.starbuttonbox.utils.NestedCompositionLocalProvider
@@ -76,19 +78,23 @@ class MainActivity : ComponentActivity() {
             HideSystemBarsEffect()
 
             StarButtonBoxTheme {
-                val context = LocalContext.current
+                val context = LocalContext.current.applicationContext // Use application context
                 val soundPlayer = rememberSoundPlayer()
                 val vibratorManager = remember { getVibratorManager(context) }
+                // Instantiate LayoutDatasource here
+                val layoutDatasource = remember { LayoutDatasource(context) }
 
+                // Provide all CompositionLocals using the nested provider
                 NestedCompositionLocalProvider(
                     LocalSoundPlayer provides soundPlayer,
                     LocalVibrator provides vibratorManager,
+                    LocalLayoutDatasource provides layoutDatasource // Provide LayoutDatasource
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        StarCitizenButtonBoxApp()
+                        StarCitizenButtonBoxApp() // Pass dependencies implicitly now
                     }
                 }
             }
@@ -122,17 +128,13 @@ private fun HideSystemBarsEffect() {
                 windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
             }
         }
-
         // Initial hide
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
         lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 }
 
@@ -143,7 +145,9 @@ fun StarCitizenButtonBoxApp() {
     val scope = rememberCoroutineScope()
 
     // --- Datasource Instantiation ---
+    // ConfigDatasource is still needed for network settings
     val configDatasource = remember { ConfigDatasource(context.applicationContext) }
+    // LayoutDatasource is now provided via CompositionLocal, no need to instantiate here
 
     val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(
         initialValue = null
@@ -153,32 +157,18 @@ fun StarCitizenButtonBoxApp() {
 
     LaunchedEffect(targetNetworkConfig) {
         val (ip, port) = targetNetworkConfig ?: return@LaunchedEffect
-        // Show dialog if config is null AND the dialog isn't already manually shown
         if (!showSettingsDialog && (ip == null || port == null)) {
-            Log.d(
-                "StarCitizenButtonBoxApp",
-                "Config missing, showing settings dialog automatically."
-            )
+            Log.d("StarCitizenButtonBoxApp", "Config missing, showing settings dialog automatically.")
             showSettingsDialog = true
         }
     }
 
     val udpSender: UdpSender? = remember(targetNetworkConfig) {
         targetNetworkConfig?.let { (ip, port) ->
-            if (ip != null && port != null) {
-                Log.d("UdpSender", "Creating/Updating UdpSender for $ip:$port")
-                UdpSender(ip, port)
-            } else {
-                Log.d("UdpSender", "Config not ready, UdpSender is null")
-                null
-            }
-        } ?: run {
-            Log.d("UdpSender", "NetworkConfig is still loading")
-            null
+            if (ip != null && port != null) UdpSender(ip, port) else null
         }
     }
 
-    // Command handler lambda - check if sender is available
     val handleCommand = { command: Command ->
         if (udpSender != null) {
             udpSender.sendCommandAction(command)
@@ -186,13 +176,13 @@ fun StarCitizenButtonBoxApp() {
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "Settings required", Toast.LENGTH_SHORT).show()
             }
-            // Attempt to show settings dialog again if sender is null and dialog isn't already showing
             if (!showSettingsDialog) showSettingsDialog = true
         }
         Unit
     }
 
     // Tab Definitions and State
+    // Get tabs without passing datasource explicitly
     val tabItems = remember { TabDatasource.getTabs() }
     var selectedTabIndex by remember { mutableStateOf(0) }
 
@@ -234,14 +224,8 @@ fun StarCitizenButtonBoxApp() {
             }
 
             // Settings Button
-            IconButton(onClick = {
-                showSettingsDialog = true
-            }) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = "Settings",
-                    tint = Color.White
-                )
+            IconButton(onClick = { showSettingsDialog = true }) {
+                Icon(Icons.Filled.Settings, "Settings", tint = Color.White)
             }
         }
 
@@ -255,7 +239,6 @@ fun StarCitizenButtonBoxApp() {
                 val selectedTab = tabItems[selectedTabIndex]
                 selectedTab.content(handleCommand) // Pass the command handler
             } else {
-                // Handle invalid tab index gracefully
                 PlaceholderLayout("Error: Invalid Tab Index")
             }
         }
@@ -263,16 +246,13 @@ fun StarCitizenButtonBoxApp() {
 
     // --- Conditionally display the Settings Dialog ---
     if (showSettingsDialog) {
-        // Ensure networkConfigFlow is passed correctly if needed by SettingsDialog internally
-        // The current SettingsDialog signature takes onSave and onDismiss, and networkConfigFlow
         SettingsDialog(
             onDismissRequest = {
                 targetNetworkConfig?.let { (ip, port) ->
                     if (ip != null && port != null) {
                         showSettingsDialog = false
                     } else {
-                        Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT)
-                            .show()
+                        Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT).show()
                     }
                 } ?: Toast.makeText(context, "Loading Settings...", Toast.LENGTH_SHORT).show()
             },
@@ -285,7 +265,7 @@ fun StarCitizenButtonBoxApp() {
                     }
                 }
             },
-            networkConfigFlow = configDatasource.networkConfigFlow, // Pass the flow
+            networkConfigFlow = configDatasource.networkConfigFlow,
         )
     }
 }
