@@ -2,9 +2,9 @@
 
 package com.ongxeno.android.starbuttonbox.data
 
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.InternalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /**
  * Represents different types of input actions that can be sent to the PC server.

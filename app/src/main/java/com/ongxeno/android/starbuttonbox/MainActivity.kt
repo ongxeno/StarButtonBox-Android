@@ -30,7 +30,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider // Import CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,8 +56,11 @@ import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.setting.SettingsDialog
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
-import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer // Import CompositionLocal
-import com.ongxeno.android.starbuttonbox.utils.rememberSoundPlayer // Import rememberSoundPlayer
+import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer
+import com.ongxeno.android.starbuttonbox.utils.LocalVibrator
+import com.ongxeno.android.starbuttonbox.utils.NestedCompositionLocalProvider
+import com.ongxeno.android.starbuttonbox.utils.getVibratorManager
+import com.ongxeno.android.starbuttonbox.utils.rememberSoundPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,12 +73,17 @@ class MainActivity : ComponentActivity() {
         hideSystemBars()
 
         setContent {
-            HideSystemBarsEffect() // Keep this effect
-
-            val soundPlayer = rememberSoundPlayer()
+            HideSystemBarsEffect()
 
             StarButtonBoxTheme {
-                CompositionLocalProvider(LocalSoundPlayer provides soundPlayer) {
+                val context = LocalContext.current
+                val soundPlayer = rememberSoundPlayer()
+                val vibratorManager = remember { getVibratorManager(context) }
+
+                NestedCompositionLocalProvider(
+                    LocalSoundPlayer provides soundPlayer,
+                    LocalVibrator provides vibratorManager,
+                ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
@@ -138,7 +145,9 @@ fun StarCitizenButtonBoxApp() {
     // --- Datasource Instantiation ---
     val configDatasource = remember { ConfigDatasource(context.applicationContext) }
 
-    val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(initialValue = null)
+    val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(
+        initialValue = null
+    )
 
     var showSettingsDialog by remember { mutableStateOf(false) }
 
@@ -146,7 +155,10 @@ fun StarCitizenButtonBoxApp() {
         val (ip, port) = targetNetworkConfig ?: return@LaunchedEffect
         // Show dialog if config is null AND the dialog isn't already manually shown
         if (!showSettingsDialog && (ip == null || port == null)) {
-            Log.d("StarCitizenButtonBoxApp", "Config missing, showing settings dialog automatically.")
+            Log.d(
+                "StarCitizenButtonBoxApp",
+                "Config missing, showing settings dialog automatically."
+            )
             showSettingsDialog = true
         }
     }
@@ -185,9 +197,11 @@ fun StarCitizenButtonBoxApp() {
     var selectedTabIndex by remember { mutableStateOf(0) }
 
     // --- Main UI Structure ---
-    Column(modifier = Modifier
-        .fillMaxSize()
-        .background(Color.Black)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
         // Top Bar (Tabs + Settings)
         Row(
             modifier = Modifier
@@ -257,7 +271,8 @@ fun StarCitizenButtonBoxApp() {
                     if (ip != null && port != null) {
                         showSettingsDialog = false
                     } else {
-                        Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT)
+                            .show()
                     }
                 } ?: Toast.makeText(context, "Loading Settings...", Toast.LENGTH_SHORT).show()
             },

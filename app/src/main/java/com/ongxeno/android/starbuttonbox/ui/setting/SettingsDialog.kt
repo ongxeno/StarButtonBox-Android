@@ -106,7 +106,8 @@ fun SettingsDialog(
                 onClick = {
                     val portInt = portState.toIntOrNull()
                     if (ipAddressState.isBlank()) {
-                        Toast.makeText(context, "IP Address cannot be empty", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "IP Address cannot be empty", Toast.LENGTH_SHORT)
+                            .show()
                     } else if (portInt == null || portInt !in 1..65535) {
                         Toast.makeText(context, "Invalid Port (1-65535)", Toast.LENGTH_SHORT).show()
                     } else {

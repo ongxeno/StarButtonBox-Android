@@ -32,7 +32,12 @@ fun CombatSystemsBlock(
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("COMBAT SYSTEMS", color = Color.LightGray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "COMBAT SYSTEMS",
+            color = Color.LightGray,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
         Spacer(modifier = Modifier.height(12.dp))
 
         Text("COUNTERMEASURES", color = Color.Gray, fontSize = 10.sp)
@@ -40,9 +45,18 @@ fun CombatSystemsBlock(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            MomentaryButton(text = "PANIC", modifier = Modifier.weight(1f)) { sendCommand(Command.Countermeasures.DeployDecoyPanic) }
-            MomentaryButton(text = "DECOY", modifier = Modifier.weight(1f)) { sendCommand(Command.Countermeasures.DeployDecoyBurst) }
-            MomentaryButton(text = "NOISE", modifier = Modifier.weight(1f)) { sendCommand(Command.Countermeasures.DeployNoise) }
+            MomentaryButton(
+                text = "PANIC",
+                modifier = Modifier.weight(1f),
+                onPress = { sendCommand(Command.Countermeasures.DeployDecoyPanic) })
+            MomentaryButton(
+                text = "DECOY",
+                modifier = Modifier.weight(1f),
+                onPress = { sendCommand(Command.Countermeasures.DeployDecoyBurst) })
+            MomentaryButton(
+                text = "NOISE",
+                modifier = Modifier.weight(1f),
+                onPress = { sendCommand(Command.Countermeasures.DeployNoise) })
         }
 
         Spacer(modifier = Modifier.height(16.dp))

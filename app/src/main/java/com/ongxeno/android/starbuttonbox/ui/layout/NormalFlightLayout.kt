@@ -19,7 +19,6 @@ import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.ui.button.CombatSystemsBlock
 import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.button.SafetyButton
-import com.ongxeno.android.starbuttonbox.ui.button.TimedFeedbackButton
 
 
 @Composable
@@ -41,23 +40,25 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) {
             ) {
                 Text("SYSTEMS", color = Color.Gray, fontSize = 10.sp)
                 Row {
-                    MomentaryButton(text = "FLT RDY", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.GeneralCockpit.FlightReady)
-                    }
-                    TimedFeedbackButton(
+                    MomentaryButton(
+                        text = "FLT RDY",
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.GeneralCockpit.FlightReady) })
+                    MomentaryButton(
                         text = "ENGINES",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.PowerManagement.TogglePowerEngines) }
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.PowerManagement.TogglePowerEngines) })
                 }
                 Row {
-                    TimedFeedbackButton(
+                    MomentaryButton(
                         text = "LIGHTS",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleHeadLight) }
-                    TimedFeedbackButton(
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Flight.ToggleHeadLight) })
+                    MomentaryButton(
                         text = "DOORS",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.GeneralCockpit.ToggleAllDoors) } // Use lambda
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.GeneralCockpit.ToggleAllDoors) }
+                    )
                 }
             }
 
@@ -106,24 +107,25 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) {
             ) {
                 Text("FLIGHT MODES", color = Color.Gray, fontSize = 10.sp)
                 Row {
-                    TimedFeedbackButton(
+                    MomentaryButton(
                         text = "DECOUPLE",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleDecoupledMode) }
-                    TimedFeedbackButton(
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Flight.ToggleDecoupledMode) })
+                    MomentaryButton(
                         text = "VTOL",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleVTOLMode) }
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Flight.ToggleVTOLMode) })
                 }
                 Row {
-                    TimedFeedbackButton(
+                    MomentaryButton(
                         text = "CRUISE",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleCruiseControl) }
-                    TimedFeedbackButton(
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Flight.ToggleCruiseControl) })
+                    MomentaryButton(
                         text = "SPD LMT",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Flight.ToggleSpeedLimiter) } // Use lambda
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Flight.ToggleSpeedLimiter) }
+                    )
                 }
             }
 
@@ -138,81 +140,88 @@ fun NormalFlightLayout(onCommand: (Command) -> Unit) {
                 Row {
                     MomentaryButton(
                         text = "TGT HOST",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Targeting.CycleLockHostilesNext) }
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Targeting.CycleLockHostilesNext) })
                     MomentaryButton(
                         text = "TGT FRND",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Targeting.CycleLockFriendliesNext) }
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Targeting.CycleLockFriendliesNext) })
                 }
                 Row {
-                    MomentaryButton(text = "PIN TGT", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.PinTarget1)
-                    }
-                    MomentaryButton(text = "SUB RST", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.ResetSubtargetToMain)
-                    }
+                    MomentaryButton(
+                        text = "PIN TGT",
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Targeting.PinTarget1) })
+                    MomentaryButton(
+                        text = "SUB RST",
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Targeting.ResetSubtargetToMain) })
                 }
                 Row {
-                    MomentaryButton(text = "SUB CYC", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.CycleLockSubtargetsNext)
-                    }
-                    MomentaryButton(text = "UNLOCK", modifier = Modifier.weight(1f)) {
-                        onCommand(Command.Targeting.UnlockLockedTarget)
-                    }
+                    MomentaryButton(
+                        text = "SUB CYC",
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Targeting.CycleLockSubtargetsNext) })
+                    MomentaryButton(
+                        text = "UNLOCK",
+                        modifier = Modifier.weight(1f),
+                        onPress = { onCommand(Command.Targeting.UnlockLockedTarget) })
                 }
             }
         }
-        // --- BOTTOM ROW ---
-        Spacer(modifier = Modifier.height(16.dp))
 
-        // --- BOTTOM ROW: Nav/Scan/Landing & CM/Power ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top
+
+    }
+    // --- BOTTOM ROW ---
+    Spacer(modifier = Modifier.height(16.dp))
+
+    // --- BOTTOM ROW: Nav/Scan/Landing & CM/Power ---
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        // Nav/Scan/Landing Block
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Nav/Scan/Landing Block
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("NAVIGATION / LANDING", color = Color.Gray, fontSize = 10.sp)
-                Row {
-                    MomentaryButton(
-                        text = "QT SPOOL",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.QuantumTravel.ToggleQuantumMode) }
-                    MomentaryButton(
-                        text = "QT ENGAGE",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.QuantumTravel.ActivateQuantumTravel) }
-                }
-                Row {
-                    TimedFeedbackButton(
-                        text = "SCAN MODE",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Scanning.ToggleScanningMode) }
-                    MomentaryButton(
-                        text = "SCAN PING",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.Scanning.ActivatePing) }
-                }
-                Row {
-                    TimedFeedbackButton(
-                        text = "GEAR",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.LandingAndDocking.ToggleLandingGear) }
-                    MomentaryButton(
-                        text = "ATC",
-                        modifier = Modifier.weight(1f)
-                    ) { onCommand(Command.LandingAndDocking.RequestLandingTakeoff) }
-                }
+            Text("NAVIGATION / LANDING", color = Color.Gray, fontSize = 10.sp)
+            Row {
+                MomentaryButton(
+                    text = "QT SPOOL",
+                    modifier = Modifier.weight(1f),
+                    onPress = { onCommand(Command.QuantumTravel.ToggleQuantumMode) })
+                MomentaryButton(
+                    text = "QT ENGAGE",
+                    modifier = Modifier.weight(1f),
+                    onPress = { onCommand(Command.QuantumTravel.ActivateQuantumTravel) })
             }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Countermeasures & Power Block
-            CombatSystemsBlock(onCommand)
+            Row {
+                MomentaryButton(
+                    text = "SCAN MODE",
+                    modifier = Modifier.weight(1f),
+                    onPress = { onCommand(Command.Scanning.ToggleScanningMode) })
+                MomentaryButton(
+                    text = "SCAN PING",
+                    modifier = Modifier.weight(1f),
+                    onPress = { onCommand(Command.Scanning.ActivatePing) })
+            }
+            Row {
+                MomentaryButton(
+                    text = "GEAR",
+                    modifier = Modifier.weight(1f),
+                    onPress = { onCommand(Command.LandingAndDocking.ToggleLandingGear) })
+                MomentaryButton(
+                    text = "ATC",
+                    modifier = Modifier.weight(1f),
+                    onPress = { onCommand(Command.LandingAndDocking.RequestLandingTakeoff) })
+            }
         }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        // Countermeasures & Power Block
+        CombatSystemsBlock(onCommand)
     }
 }
+

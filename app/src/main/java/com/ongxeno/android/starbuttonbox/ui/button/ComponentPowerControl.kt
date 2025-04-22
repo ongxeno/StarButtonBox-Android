@@ -40,21 +40,27 @@ fun ComponentPowerControl(
         ) {
             MomentaryButton(
                 text = "+",
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
                 onPress = onIncrease
             )
             Spacer(Modifier.height(4.dp))
 
-            TimedFeedbackButton(
+            MomentaryButton(
                 text = "TOGGLE",
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                onClick = onActionClick
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                onPress = onActionClick
             )
 
             Spacer(Modifier.height(4.dp))
             MomentaryButton(
                 text = "-",
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
                 onPress = onDecrease
             )
         }

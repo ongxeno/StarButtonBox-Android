@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,11 +28,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape // Explicit import
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +48,8 @@ import com.ongxeno.android.starbuttonbox.ui.theme.OrangeDarkPrimary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -73,7 +75,8 @@ fun SafetyButton(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
 
-    val coverHeightPx = remember(totalHeight, density) { with(density) { (totalHeight / 2).toPx() } }
+    val coverHeightPx =
+        remember(totalHeight, density) { with(density) { (totalHeight / 2).toPx() } }
 
     val anchors = remember(coverHeightPx) {
         DraggableAnchors {
@@ -93,42 +96,77 @@ fun SafetyButton(
         )
     }
 
-    var autoCloseJob by remember { mutableStateOf<Job?>(null) }
+    var autoCloseTimerJob by remember { mutableStateOf<Job?>(null) }
 
-    LaunchedEffect(dragState.currentValue, dragState.isAnimationRunning) {
-        val target = dragState.targetValue
-        val current = dragState.currentValue
+    var momentaryButtonPressed by remember { mutableStateOf(false) }
 
-        Log.d("SlidingCover", "Effect triggered. Current: $current, Target: $target, IsAnimating: ${dragState.isAnimationRunning}, Offset: ${try { dragState.requireOffset() } catch (e:IllegalStateException) { "NaN" }}")
+    LaunchedEffect(dragState.currentValue, dragState.isAnimationRunning, momentaryButtonPressed) {
+        val isCoverOpenAndSettled =
+            dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
+        val shouldStartTimer = isCoverOpenAndSettled && !momentaryButtonPressed
 
-        if (current == CoverSlideState.OPEN && !dragState.isAnimationRunning) {
-            Log.d("SlidingCover", "Cover settled OPEN, starting/ensuring auto-close timer.")
-            autoCloseJob?.cancel()
-            autoCloseJob = scope.launch {
+        Log.d(
+            "SafetyButton",
+            "AutoClose Effect: CoverOpenSettled=$isCoverOpenAndSettled, ButtonPressed=$momentaryButtonPressed, ShouldStartTimer=$shouldStartTimer"
+        )
+
+        if (shouldStartTimer) {
+            Log.d("SafetyButton", "Conditions met. Starting auto-close timer.")
+            autoCloseTimerJob?.cancel() // Cancel previous timer if any
+            autoCloseTimerJob = scope.launch { // This job is JUST the timer
                 delay(autoCloseDelayMs)
-                if (isActive && dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning) {
-                    Log.d("SlidingCover", "Auto-close timer finished, initiating slide to CLOSED.")
-                    try {
-                        dragState.animateTo(CoverSlideState.CLOSED)
-                        Log.d("SlidingCover", "animateTo(CLOSED) finished.")
-                    } catch (e: CancellationException) {
-                        Log.d("SlidingCover", "animateTo(CLOSED) cancelled.")
-                    } catch (e: Exception) {
-                        Log.e("SlidingCover", "Error during animateTo(CLOSED)", e)
+                // Re-check conditions before closing, in case state changed during delay
+                if (isActive && dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning && !momentaryButtonPressed) {
+                    Log.d(
+                        "SafetyButton",
+                        "Auto-close timer finished. Launching separate job to close cover."
+                    )
+                    // Launch the animation in a SEPARATE job, not tied to autoCloseTimerJob
+                    scope.launch {
+                        try {
+                            dragState.animateTo(CoverSlideState.CLOSED)
+                            Log.d("SafetyButton", "animateTo(CLOSED) finished.")
+                        } catch (e: CancellationException) {
+                            Log.d("SafetyButton", "animateTo(CLOSED) cancelled.")
+                        } catch (e: Exception) {
+                            Log.e("SafetyButton", "Error during animateTo(CLOSED)", e)
+                        }
                     }
                 } else {
-                    Log.d("SlidingCover", "Auto-close timer finished, but state no longer OPEN or animation running/cancelled.")
+                    Log.d(
+                        "SafetyButton",
+                        "Auto-close timer finished, but state changed during delay. Not closing."
+                    )
                 }
             }
-        } else if (current == CoverSlideState.CLOSED && !dragState.isAnimationRunning) {
-            Log.d("SlidingCover", "Cover settled CLOSED, cancelling any active auto-close timer.")
-            autoCloseJob?.cancel()
+        } else {
+            // If conditions to start timer are not met, cancel the existing TIMER job.
+            // This will NOT cancel an ongoing animation launched separately above.
+            Log.d(
+                "SafetyButton",
+                "Conditions not met for starting timer OR button pressed. Cancelling auto-close timer job."
+            )
+            autoCloseTimerJob?.cancel()
         }
+    }
+
+    LaunchedEffect(dragState) {
+        snapshotFlow { dragState.currentValue }
+            .distinctUntilChanged()
+            .filter { it == CoverSlideState.CLOSED }
+            .collect {
+                Log.d(
+                    "SafetyButton",
+                    "Cover became CLOSED, resetting momentary button pressed state."
+                )
+                momentaryButtonPressed = false
+                autoCloseTimerJob?.cancel()
+            }
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            autoCloseJob?.cancel()
+            autoCloseTimerJob?.cancel()
         }
     }
 
@@ -139,7 +177,8 @@ fun SafetyButton(
             if (progress.isNaN()) 0f else progress
         }
     }
-    val isActionEnabled = dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
+    val isActionEnabled =
+        dragState.currentValue == CoverSlideState.OPEN && !dragState.isAnimationRunning
 
     Box(
         modifier = modifier
@@ -147,21 +186,24 @@ fun SafetyButton(
             .clipToBounds()
             .background(GreyDarkSecondary)
     ) {
-        Button(
-            onClick = {
+        MomentaryButton(
+            isPressed = momentaryButtonPressed,
+            onIsPressedChange = { pressed ->
+                momentaryButtonPressed = if (isActionEnabled) pressed else false
+            },
+            onPress = {
                 if (isActionEnabled) {
-                    Log.d("SlidingCover", "Action Button Clicked!")
                     onSafeClick()
-                    scope.launch {
-                        try {
-                            delay(500L)
-                            dragState.animateTo(CoverSlideState.CLOSED)
-                        } catch (e: Exception) {
-                            Log.e("SlidingCover", "Error during snapTo(CLOSED) after click", e)
-                        }
+                }
+            },
+            onRelease = {
+                scope.launch {
+                    try {
+                        delay(500L)
+                        dragState.animateTo(CoverSlideState.CLOSED)
+                    } catch (e: Exception) {
+                        Log.e("SlidingCover", "Error during snapTo(CLOSED) after click", e)
                     }
-                } else {
-                    Log.d("SlidingCover", "Action Button Clicked but not enabled.")
                 }
             },
             modifier = Modifier
@@ -177,14 +219,9 @@ fun SafetyButton(
                 disabledContainerColor = actionButtonColor.copy(alpha = 0.5f),
                 disabledContentColor = textColor.copy(alpha = 0.7f)
             ),
-            contentPadding = PaddingValues(8.dp)
-        ) {
-            Text(
-                text = text,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+            contentPadding = PaddingValues(8.dp),
+            text = text,
+        )
 
         Box(
             modifier = Modifier

@@ -1,6 +1,6 @@
 package com.ongxeno.android.starbuttonbox.ui.layout
 
-import android.util.Log // Optional: For logging clicks in demo
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,10 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.ongxeno.android.starbuttonbox.ui.button.ComponentPowerControl // Assuming this is one of your buttons
+import com.ongxeno.android.starbuttonbox.ui.button.ComponentPowerControl
 import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.button.SafetyButton
-import com.ongxeno.android.starbuttonbox.ui.button.TimedFeedbackButton
 import com.ongxeno.android.starbuttonbox.ui.theme.GreyDarkSecondary
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
 
@@ -40,10 +39,9 @@ fun DemoLayout(modifier: Modifier = Modifier) {
             )
         },
         DemoButtonInfo("Timed Feedback") {
-            TimedFeedbackButton(
+            MomentaryButton(
                 text = "Timed",
-                feedbackDurationMs = 1000L, // Example duration
-                onClick = { Log.d("DemoLayout", "TimedFeedbackButton pressed") },
+                onPress = { Log.d("DemoLayout", "TimedFeedbackButton pressed") },
             )
         },
         DemoButtonInfo("Safety") {

@@ -30,15 +30,21 @@ sealed class Command(val commandString: String) {
     sealed class LandingAndDocking(commandString: String) : Command(commandString) {
         data object ToggleLandingGear : LandingAndDocking("ToggleLandingGear") // N
         data object AutoLand : LandingAndDocking("AutoLand") // HOLD N
-        data object RequestLandingTakeoff : LandingAndDocking("RequestLandingTakeoff") // Left Alt + N
-        data object RequestDocking : LandingAndDocking("RequestDocking") // N (while in Docking Mode)
+        data object RequestLandingTakeoff :
+            LandingAndDocking("RequestLandingTakeoff") // Left Alt + N
+
+        data object RequestDocking :
+            LandingAndDocking("RequestDocking") // N (while in Docking Mode)
+
         data object ToggleDockingCamera : LandingAndDocking("ToggleDockingCamera") // 0
     }
 
     sealed class PowerManagement(commandString: String) : Command(commandString) {
         data object TogglePowerWeapons : PowerManagement("TogglePowerWeapons") // P
         data object TogglePowerShields : PowerManagement("TogglePowerShields") // O
-        data object TogglePowerEngines : PowerManagement("TogglePowerEngines") // I (Previously Thrusters)
+        data object TogglePowerEngines :
+            PowerManagement("TogglePowerEngines") // I (Previously Thrusters)
+
         data object TogglePowerAll : PowerManagement("TogglePowerAll") // U
         data object IncreasePowerWeapons : PowerManagement("IncreasePowerWeapons") // Tap F5
         data object MaxPowerWeapons : PowerManagement("MaxPowerWeapons") // HOLD F5
@@ -47,11 +53,17 @@ sealed class Command(val commandString: String) {
         data object IncreasePowerShields : PowerManagement("IncreasePowerShields") // Tap F7
         data object MaxPowerShields : PowerManagement("MaxPowerShields") // HOLD F7
         data object ResetPowerDistribution : PowerManagement("ResetPowerDistribution") // F8
-        data object DecreasePowerWeapons : PowerManagement("DecreasePowerWeapons") // Tap Left Alt + F5
+        data object DecreasePowerWeapons :
+            PowerManagement("DecreasePowerWeapons") // Tap Left Alt + F5
+
         data object MinPowerWeapons : PowerManagement("MinPowerWeapons") // HOLD Left Alt + F5
-        data object DecreasePowerEngines : PowerManagement("DecreasePowerEngines") // Tap Left Alt + F6
+        data object DecreasePowerEngines :
+            PowerManagement("DecreasePowerEngines") // Tap Left Alt + F6
+
         data object MinPowerEngines : PowerManagement("MinPowerEngines") // HOLD Left Alt + F6
-        data object DecreasePowerShields : PowerManagement("DecreasePowerShields") // Tap Left Alt + F7
+        data object DecreasePowerShields :
+            PowerManagement("DecreasePowerShields") // Tap Left Alt + F7
+
         data object MinPowerShields : PowerManagement("MinPowerShields") // HOLD Left Alt + F7
     }
 
@@ -81,7 +93,9 @@ sealed class Command(val commandString: String) {
         data object CycleGimbalMode : CombatPilot("CycleGimbalMode") // Long Press G
         data object ToggleMissileOperatorMode : CombatPilot("ToggleMissileOperatorMode") // MMB
         data object LaunchMissile : CombatPilot("LaunchMissile") // LMB (in Missile Mode)
-        data object CycleMissileType : CombatPilot("CycleMissileType") // Mouse Wheel (in Missile Mode)
+        data object CycleMissileType :
+            CombatPilot("CycleMissileType") // Mouse Wheel (in Missile Mode)
+
         data object IncreaseArmedMissiles : CombatPilot("IncreaseArmedMissiles") // Tap G
         data object ResetArmedMissiles : CombatPilot("ResetArmedMissiles") // Left Alt + G
     }
@@ -90,8 +104,12 @@ sealed class Command(val commandString: String) {
         data object DeployDecoyPanic : Countermeasures("DeployDecoyPanic") // Tap H
         data object DeployDecoyBurst : Countermeasures("DeployDecoyBurst") // Tap H
         data object SetLaunchDecoyBurst : Countermeasures("SetLaunchDecoyBurst") // Hold H
-        data object IncreaseDecoyBurstSize : Countermeasures("IncreaseDecoyBurstSize") // Right Alt + H
-        data object DecreaseDecoyBurstSize : Countermeasures("DecreaseDecoyBurstSize") // Left Alt + H
+        data object IncreaseDecoyBurstSize :
+            Countermeasures("IncreaseDecoyBurstSize") // Right Alt + H
+
+        data object DecreaseDecoyBurstSize :
+            Countermeasures("DecreaseDecoyBurstSize") // Left Alt + H
+
         data object DeployNoise : Countermeasures("DeployNoise") // J
     }
 
@@ -111,7 +129,8 @@ sealed class Command(val commandString: String) {
         data object SelfDestruct : GeneralCockpit("SelfDestruct") // Hold Backspace
         data object TogglePortLockAll : GeneralCockpit("TogglePortLockAll") // Right Alt + K
         data object ToggleAllDoors : GeneralCockpit("ToggleAllDoors") // Requires manual binding
-        data object ToggleLockAllDoors : GeneralCockpit("ToggleLockAllDoors") // Requires manual binding
+        data object ToggleLockAllDoors :
+            GeneralCockpit("ToggleLockAllDoors") // Requires manual binding
     }
 
     // --- Salvaging Operations ---
@@ -119,22 +138,41 @@ sealed class Command(val commandString: String) {
         data object ToggleSalvageMode : ShipSalvage("ToggleSalvageMode") // M
         data object ToggleSalvageGimbal : ShipSalvage("ToggleSalvageGimbal") // G
         data object ResetSalvageGimbal : ShipSalvage("ResetSalvageGimbal") // Left Alt + G
-        data object ToggleSalvageBeamFocused : ShipSalvage("ToggleSalvageBeamFocused") // LMB (Toggle)
-        data object ToggleSalvageBeamLeft : ShipSalvage("ToggleSalvageBeamLeft") // Right Alt + A (Toggle)
-        data object ToggleSalvageBeamRight : ShipSalvage("ToggleSalvageBeamRight") // Right Alt + D (Toggle)
-        data object ToggleSalvageBeamFracture : ShipSalvage("ToggleSalvageBeamFracture") // Right Alt + W (Toggle)
-        data object ToggleSalvageBeamDisintegrate : ShipSalvage("ToggleSalvageBeamDisintegrate") // Right Alt + S (Toggle)
+        data object ToggleSalvageBeamFocused :
+            ShipSalvage("ToggleSalvageBeamFocused") // LMB (Toggle)
+
+        data object ToggleSalvageBeamLeft :
+            ShipSalvage("ToggleSalvageBeamLeft") // Right Alt + A (Toggle)
+
+        data object ToggleSalvageBeamRight :
+            ShipSalvage("ToggleSalvageBeamRight") // Right Alt + D (Toggle)
+
+        data object ToggleSalvageBeamFracture :
+            ShipSalvage("ToggleSalvageBeamFracture") // Right Alt + W (Toggle)
+
+        data object ToggleSalvageBeamDisintegrate :
+            ShipSalvage("ToggleSalvageBeamDisintegrate") // Right Alt + S (Toggle)
+
         data object CycleSalvageModifiers : ShipSalvage("CycleSalvageModifiers") // RMB
         data object AdjustSalvageBeamSpacingUp : ShipSalvage("AdjustSalvageBeamSpacingUp") // MWU
-        data object AdjustSalvageBeamSpacingDown : ShipSalvage("AdjustSalvageBeamSpacingDown") // MWD
+        data object AdjustSalvageBeamSpacingDown :
+            ShipSalvage("AdjustSalvageBeamSpacingDown") // MWD
+
         data object ToggleSalvageBeamAxis : ShipSalvage("ToggleSalvageBeamAxis") // Left Alt + RMB
         data object FocusSalvageHeadsAll : ShipSalvage("FocusSalvageHeadsAll") // Left Alt + S
         data object FocusSalvageHeadLeft : ShipSalvage("FocusSalvageHeadLeft") // Left Alt + A
         data object FocusSalvageHeadRight : ShipSalvage("FocusSalvageHeadRight") // Left Alt + D
-        data object FocusSalvageToolFracture : ShipSalvage("FocusSalvageToolFracture") // Left Alt + W
-        data object IncreaseSalvageBeamSpacing : ShipSalvage("IncreaseSalvageBeamSpacing") // Requires manual binding
-        data object DecreaseSalvageBeamSpacing : ShipSalvage("DecreaseSalvageBeamSpacing") // Requires manual binding
-        data object SetAbsoluteSalvageBeamSpacing : ShipSalvage("SetAbsoluteSalvageBeamSpacing") // Requires manual binding
+        data object FocusSalvageToolFracture :
+            ShipSalvage("FocusSalvageToolFracture") // Left Alt + W
+
+        data object IncreaseSalvageBeamSpacing :
+            ShipSalvage("IncreaseSalvageBeamSpacing") // Requires manual binding
+
+        data object DecreaseSalvageBeamSpacing :
+            ShipSalvage("DecreaseSalvageBeamSpacing") // Requires manual binding
+
+        data object SetAbsoluteSalvageBeamSpacing :
+            ShipSalvage("SetAbsoluteSalvageBeamSpacing") // Requires manual binding
     }
 
     // --- Mining Operations ---
@@ -145,9 +183,15 @@ sealed class Command(val commandString: String) {
         data object IncreaseMiningLaserPower : ShipMining("IncreaseMiningLaserPower") // MWU
         data object DecreaseMiningLaserPower : ShipMining("DecreaseMiningLaserPower") // MWD
         data object CycleMiningLaserGimbal : ShipMining("CycleMiningLaserGimbal") // G
-        data object ActivateMiningConsumable1 : ShipMining("ActivateMiningConsumable1") // Left Alt + 1
-        data object ActivateMiningConsumable2 : ShipMining("ActivateMiningConsumable2") // Left Alt + 2
-        data object ActivateMiningConsumable3 : ShipMining("ActivateMiningConsumable3") // Left Alt + 3
+        data object ActivateMiningConsumable1 :
+            ShipMining("ActivateMiningConsumable1") // Left Alt + 1
+
+        data object ActivateMiningConsumable2 :
+            ShipMining("ActivateMiningConsumable2") // Left Alt + 2
+
+        data object ActivateMiningConsumable3 :
+            ShipMining("ActivateMiningConsumable3") // Left Alt + 3
+
         data object JettisonCargo : ShipMining("JettisonCargo") // Left Alt + J
     }
 
@@ -156,12 +200,20 @@ sealed class Command(val commandString: String) {
         data object ToggleTurretAimMode : Turret("ToggleTurretAimMode") // Q
         data object RecenterTurret : Turret("RecenterTurret") // Hold C
         data object ChangeTurretPosition : Turret("ChangeTurretPosition") // S
-        data object AdjustTurretSpeedLimiterUp : Turret("AdjustTurretSpeedLimiterUp") // Left Alt + MWU
-        data object AdjustTurretSpeedLimiterDown : Turret("AdjustTurretSpeedLimiterDown") // Left Alt + MWD
+        data object AdjustTurretSpeedLimiterUp :
+            Turret("AdjustTurretSpeedLimiterUp") // Left Alt + MWU
+
+        data object AdjustTurretSpeedLimiterDown :
+            Turret("AdjustTurretSpeedLimiterDown") // Left Alt + MWD
+
         data object FireTurretWeapons : Turret("FireTurretWeapons") // LMB
         data object CycleTurretFireMode : Turret("CycleTurretFireMode") // Requires manual binding
-        data object ToggleTurretPrecisionTargeting : Turret("ToggleTurretPrecisionTargeting") // Tap RMB
-        data object ZoomTurretPrecisionTargeting : Turret("ZoomTurretPrecisionTargeting") // Hold RMB
+        data object ToggleTurretPrecisionTargeting :
+            Turret("ToggleTurretPrecisionTargeting") // Tap RMB
+
+        data object ZoomTurretPrecisionTargeting :
+            Turret("ZoomTurretPrecisionTargeting") // Hold RMB
+
         data object CycleTurretPrecisionMode : Turret("CycleTurretPrecisionMode") // Right Alt + RMB
         data object ToggleTurretGyroStabilization : Turret("ToggleTurretGyroStabilization") // E
         data object SwitchToNextRemoteTurret : Turret("SwitchToNextRemoteTurret") // D

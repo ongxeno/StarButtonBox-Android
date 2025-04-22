@@ -45,7 +45,10 @@ class SoundPlayer(
             if (status == 0) {
                 Log.d("SoundPlayer", "SoundPool loaded sample ID: $sampleId successfully.")
             } else {
-                Log.e("SoundPlayer", "SoundPool failed to load sample ID: $sampleId, status: $status")
+                Log.e(
+                    "SoundPlayer",
+                    "SoundPool failed to load sample ID: $sampleId, status: $status"
+                )
                 val resIdToRemove = soundIdCache.entries.find { it.value == sampleId }?.key
                 if (resIdToRemove != null) {
                     soundIdCache.remove(resIdToRemove)
@@ -78,9 +81,15 @@ class SoundPlayer(
                 val soundId = soundPool?.load(context, resId, 1)
                 if (soundId != null && soundId != 0) {
                     soundIdCache[resId] = soundId
-                    Log.d("SoundPlayer", "Successfully initiated loading for Res ID: $resId, SoundPool ID: $soundId")
+                    Log.d(
+                        "SoundPlayer",
+                        "Successfully initiated loading for Res ID: $resId, SoundPool ID: $soundId"
+                    )
                 } else {
-                    Log.e("SoundPlayer", "Failed to initiate loading for Res ID: $resId. load() returned 0 or null.")
+                    Log.e(
+                        "SoundPlayer",
+                        "Failed to initiate loading for Res ID: $resId. load() returned 0 or null."
+                    )
                 }
             } catch (e: Exception) {
                 Log.e("SoundPlayer", "Exception loading sound Res ID: $resId", e)
@@ -107,7 +116,10 @@ class SoundPlayer(
         rate: Float = 1.0f
     ) {
         if (soundPool == null || !isSoundPoolLoaded) {
-            Log.w("SoundPlayer", "SoundPool not initialized or not ready. Cannot play sound Res ID: $resId")
+            Log.w(
+                "SoundPlayer",
+                "SoundPool not initialized or not ready. Cannot play sound Res ID: $resId"
+            )
             return
         }
 
@@ -116,7 +128,10 @@ class SoundPlayer(
             soundPool?.play(soundId, volume, volume, priority, loop, rate)
             Log.d("SoundPlayer", "Playing sound Res ID: $resId (SoundPool ID: $soundId)")
         } else {
-            Log.w("SoundPlayer", "Sound Res ID: $resId not loaded yet. Attempting to load and play.")
+            Log.w(
+                "SoundPlayer",
+                "Sound Res ID: $resId not loaded yet. Attempting to load and play."
+            )
             loadSound(resId)
         }
     }

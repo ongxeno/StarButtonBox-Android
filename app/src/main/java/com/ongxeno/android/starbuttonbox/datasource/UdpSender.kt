@@ -49,7 +49,10 @@ class UdpSender(
         val inputAction: InputAction? = command.toInputAction()
 
         if (inputAction != null) {
-            sendActionInternal(inputAction, command.commandString) // Pass original command string for logging context
+            sendActionInternal(
+                inputAction,
+                command.commandString
+            ) // Pass original command string for logging context
         } else {
             Log.w(TAG, "No InputAction mapped for command: ${command.commandString}. Nothing sent.")
             // Optional: Implement callback/state to notify UI about unmapped command
@@ -68,7 +71,11 @@ class UdpSender(
             val jsonString = try {
                 json.encodeToString(inputAction)
             } catch (e: Exception) {
-                Log.e(TAG, "Error serializing action for command '$originalCommandString': $inputAction", e)
+                Log.e(
+                    TAG,
+                    "Error serializing action for command '$originalCommandString': $inputAction",
+                    e
+                )
                 return@launch // Stop if serialization fails
             }
 
@@ -81,7 +88,10 @@ class UdpSender(
 
                 socket.send(packet)
 
-                Log.d(TAG, "Sent JSON for '$originalCommandString': $jsonString to $targetIpAddress:$targetPort")
+                Log.d(
+                    TAG,
+                    "Sent JSON for '$originalCommandString': $jsonString to $targetIpAddress:$targetPort"
+                )
                 // Optional: Implement a callback or state flow here to notify UI of success
 
             } catch (e: Exception) {
