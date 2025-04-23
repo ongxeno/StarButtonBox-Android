@@ -1,9 +1,9 @@
 package com.ongxeno.android.starbuttonbox.datasource // Or your preferred package
 
 import android.util.Log
-import com.ongxeno.android.starbuttonbox.data.Command
+// No longer need Command import here
 import com.ongxeno.android.starbuttonbox.data.InputAction
-import com.ongxeno.android.starbuttonbox.data.toInputAction
+import com.ongxeno.android.starbuttonbox.data.mapCommandIdentifierToAction // Import the mapper function
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -14,7 +14,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 
 /**
- * Handles serializing InputActions (obtained by mapping Commands)
+ * Handles serializing InputActions (obtained by mapping command identifier strings)
  * and sending them as JSON strings via UDP packets.
  *
  * @param targetIpAddress The IP address of the receiving PC server.
@@ -38,23 +38,22 @@ class UdpSender(
     }
 
     /**
-     * Maps the given Command to its corresponding InputAction using the
-     * toInputAction() extension function and sends it.
-     * Logs a warning if no mapping is found for the command.
+     * Maps the given command identifier string to its corresponding InputAction using the
+     * mapCommandIdentifierToAction() function and sends it.
+     * Logs a warning if no mapping is found for the command identifier.
      *
-     * @param command The Command object to process and send.
+     * @param commandIdentifier The unique string identifying the command (e.g., "Flight.Boost").
      */
-    fun sendCommandAction(command: Command) {
-        // Use the Command.toInputAction() extension function directly
-        val inputAction: InputAction? = command.toInputAction()
+    // Changed signature to accept String
+    fun sendCommandAction(commandIdentifier: String) {
+        // Use the mapping function from KeyMapper.kt (or wherever you placed it)
+        val inputAction: InputAction? = mapCommandIdentifierToAction(commandIdentifier)
 
         if (inputAction != null) {
-            sendActionInternal(
-                inputAction,
-                command.commandString
-            ) // Pass original command string for logging context
+            // Pass the identifier string for logging
+            sendActionInternal(inputAction, commandIdentifier)
         } else {
-            Log.w(TAG, "No InputAction mapped for command: ${command.commandString}. Nothing sent.")
+            Log.w(TAG, "No InputAction mapped for command identifier: $commandIdentifier. Nothing sent.")
             // Optional: Implement callback/state to notify UI about unmapped command
         }
     }
@@ -63,9 +62,9 @@ class UdpSender(
      * Internal function to serialize and send a resolved InputAction via UDP.
      *
      * @param inputAction The InputAction object to send.
-     * @param originalCommandString The string representation of the original command for logging.
+     * @param originalCommandIdentifier The string identifier of the original command for logging.
      */
-    private fun sendActionInternal(inputAction: InputAction, originalCommandString: String) {
+    private fun sendActionInternal(inputAction: InputAction, originalCommandIdentifier: String) {
         scope.launch { // Launch network operation in the background
             var socket: DatagramSocket? = null
             val jsonString = try {
@@ -73,7 +72,7 @@ class UdpSender(
             } catch (e: Exception) {
                 Log.e(
                     TAG,
-                    "Error serializing action for command '$originalCommandString': $inputAction",
+                    "Error serializing action for command '$originalCommandIdentifier': $inputAction",
                     e
                 )
                 return@launch // Stop if serialization fails
@@ -88,14 +87,15 @@ class UdpSender(
 
                 socket.send(packet)
 
+                // Log using the command identifier string
                 Log.d(
                     TAG,
-                    "Sent JSON for '$originalCommandString': $jsonString to $targetIpAddress:$targetPort"
+                    "Sent JSON for '$originalCommandIdentifier': $jsonString to $targetIpAddress:$targetPort"
                 )
                 // Optional: Implement a callback or state flow here to notify UI of success
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending UDP packet for command '$originalCommandString'", e)
+                Log.e(TAG, "Error sending UDP packet for command '$originalCommandIdentifier'", e)
                 // Optional: Implement a callback or state flow here to notify UI of failure
             } finally {
                 socket?.close() // Ensure the socket is always closed

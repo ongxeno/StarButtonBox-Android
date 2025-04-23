@@ -1,13 +1,18 @@
 package com.ongxeno.android.starbuttonbox.data // Or your preferred package
 
+import android.util.Log // Import Log for warnings
+
 /**
- * Extension function to map a logical Command object to a specific physical InputAction.
- * This determines the actual key/mouse press details based on default bindings
- * from the Star Citizen Keybinding Compilation document (Alpha 3.18+) and common usage.
+ * Maps a unique command identifier string (e.g., "Flight.Boost") to a specific
+ * physical InputAction. This determines the actual key/mouse press details based
+ * on default bindings from the Star Citizen Keybinding Compilation document (Alpha 3.18+)
+ * and common usage.
  *
- * Returns null if the command has no default binding or isn't mapped here.
+ * Returns null if the command identifier has no default binding or isn't mapped here.
+ *
+ * @param commandIdentifier The unique string identifying the command.
  */
-fun Command.toInputAction(): InputAction? {
+fun mapCommandIdentifierToAction(commandIdentifier: String): InputAction? {
     // Default hold duration if not specified otherwise (e.g., for Max Power)
     val defaultHoldDuration = 500L
     // Specific hold durations based on common usage or document notes
@@ -32,406 +37,369 @@ fun Command.toInputAction(): InputAction? {
     val cycleGimbalHoldInfo = PressType.HOLD(cycleGimbalHoldDuration)
 
 
-    return when (this) {
+    // Use the Command object constants for comparison
+    return when (commandIdentifier) {
         // --- Flight & Driving Systems ---
-        is Command.Flight.Boost -> InputAction.KeyEvent(
+        Command.Flight_Boost -> InputAction.KeyEvent(
             key = ModifierKeys.SHIFT_LEFT,
             pressType = PressType.HOLD(0) // Hold indefinitely until released by user
         )
-
-        is Command.Flight.Spacebrake -> InputAction.KeyEvent(key = "x")
-        is Command.Flight.ToggleDecoupledMode -> InputAction.KeyEvent(
+        Command.Flight_Spacebrake -> InputAction.KeyEvent(key = "x")
+        Command.Flight_ToggleDecoupledMode -> InputAction.KeyEvent(
             key = "c",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-
-        is Command.Flight.ToggleCruiseControl -> InputAction.KeyEvent(key = "c")
-        is Command.Flight.AdjustSpeedLimiterUp -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
-        is Command.Flight.AdjustSpeedLimiterDown -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
-        is Command.Flight.ToggleVTOLMode -> InputAction.KeyEvent(key = "k")
-        is Command.Flight.ToggleLockPitchYaw -> InputAction.KeyEvent(key = ModifierKeys.SHIFT_RIGHT) // ESP Toggle
-        is Command.Flight.ToggleHeadLight -> InputAction.KeyEvent(key = "l")
-        is Command.Flight.ToggleSpeedLimiter -> InputAction.MouseEvent(MouseButton.MIDDLE)
-        // New Flight Commands
-        is Command.Flight.StrafeUp -> InputAction.KeyEvent(key = "space")
-        is Command.Flight.StrafeDown -> InputAction.KeyEvent(key = ModifierKeys.CTRL_LEFT)
-        is Command.Flight.StrafeLeft -> InputAction.KeyEvent(key = "a")
-        is Command.Flight.StrafeRight -> InputAction.KeyEvent(key = "d")
-        is Command.Flight.StrafeForward -> InputAction.KeyEvent(key = "w")
-        is Command.Flight.StrafeBackward -> InputAction.KeyEvent(key = "s")
-        is Command.Flight.RollLeft -> InputAction.KeyEvent(key = "q")
-        is Command.Flight.RollRight -> InputAction.KeyEvent(key = "e")
-
+        Command.Flight_ToggleCruiseControl -> InputAction.KeyEvent(key = "c")
+        Command.Flight_AdjustSpeedLimiterUp -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
+        Command.Flight_AdjustSpeedLimiterDown -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
+        Command.Flight_ToggleVTOLMode -> InputAction.KeyEvent(key = "k")
+        Command.Flight_ToggleLockPitchYaw -> InputAction.KeyEvent(key = ModifierKeys.SHIFT_RIGHT) // ESP Toggle
+        Command.Flight_ToggleHeadLight -> InputAction.KeyEvent(key = "l")
+        Command.Flight_ToggleSpeedLimiter -> InputAction.MouseEvent(MouseButton.MIDDLE)
+        Command.Flight_StrafeUp -> InputAction.KeyEvent(key = "space")
+        Command.Flight_StrafeDown -> InputAction.KeyEvent(key = ModifierKeys.CTRL_LEFT)
+        Command.Flight_StrafeLeft -> InputAction.KeyEvent(key = "a")
+        Command.Flight_StrafeRight -> InputAction.KeyEvent(key = "d")
+        Command.Flight_StrafeForward -> InputAction.KeyEvent(key = "w")
+        Command.Flight_StrafeBackward -> InputAction.KeyEvent(key = "s")
+        Command.Flight_RollLeft -> InputAction.KeyEvent(key = "q")
+        Command.Flight_RollRight -> InputAction.KeyEvent(key = "e")
 
         // --- Quantum Travel ---
-        is Command.QuantumTravel.ToggleQuantumMode -> InputAction.KeyEvent(key = "b") // Spool / Calibrate / Cancel
-        is Command.QuantumTravel.ActivateQuantumTravel -> InputAction.KeyEvent(
+        Command.QuantumTravel_ToggleQuantumMode -> InputAction.KeyEvent(key = "b") // Spool / Calibrate / Cancel
+        Command.QuantumTravel_ActivateQuantumTravel -> InputAction.KeyEvent(
             key = "b",
             pressType = quantumEngageHoldInfo
         ) // Engage
-        is Command.QuantumTravel.CalibrateQuantumDrive -> InputAction.KeyEvent(key = "b") // Same as ToggleQuantumMode
-        is Command.QuantumTravel.SetQuantumRoute -> null // Requires manual binding / interaction
+        Command.QuantumTravel_CalibrateQuantumDrive -> InputAction.KeyEvent(key = "b") // Same as ToggleQuantumMode
+        Command.QuantumTravel_SetQuantumRoute -> null // Requires manual binding / interaction
 
         // --- Landing & Docking ---
-        is Command.LandingAndDocking.ToggleLandingGear -> InputAction.KeyEvent(key = "n")
-        is Command.LandingAndDocking.AutoLand -> InputAction.KeyEvent(
+        Command.LandingAndDocking_ToggleLandingGear -> InputAction.KeyEvent(key = "n")
+        Command.LandingAndDocking_AutoLand -> InputAction.KeyEvent(
             key = "n",
             pressType = autoLandHoldInfo
         )
-
-        is Command.LandingAndDocking.RequestLandingTakeoff -> InputAction.KeyEvent(
+        Command.LandingAndDocking_RequestLandingTakeoff -> InputAction.KeyEvent(
             key = "n",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // ATC
-
-        is Command.LandingAndDocking.RequestDocking -> InputAction.KeyEvent(key = "n") // Context dependent
-        is Command.LandingAndDocking.ToggleDockingCamera -> InputAction.KeyEvent(key = "0")
+        Command.LandingAndDocking_RequestDocking -> InputAction.KeyEvent(key = "n") // Context dependent
+        Command.LandingAndDocking_ToggleDockingCamera -> InputAction.KeyEvent(key = "0")
 
         // --- Power Management ---
-        is Command.PowerManagement.TogglePowerWeapons -> InputAction.KeyEvent(key = "p") // Or "1" if preferred
-        is Command.PowerManagement.TogglePowerShields -> InputAction.KeyEvent(key = "o") // Or "2" if preferred
-        is Command.PowerManagement.TogglePowerEngines -> InputAction.KeyEvent(key = "i") // Or "3" if preferred
-        is Command.PowerManagement.TogglePowerAll -> InputAction.KeyEvent(key = "u")
-        is Command.PowerManagement.IncreasePowerWeapons -> InputAction.KeyEvent(key = "f5")
-        is Command.PowerManagement.MaxPowerWeapons -> InputAction.KeyEvent(
+        Command.PowerManagement_TogglePowerWeapons -> InputAction.KeyEvent(key = "p") // Or "1" if preferred
+        Command.PowerManagement_TogglePowerShields -> InputAction.KeyEvent(key = "o") // Or "2" if preferred
+        Command.PowerManagement_TogglePowerEngines -> InputAction.KeyEvent(key = "i") // Or "3" if preferred
+        Command.PowerManagement_TogglePowerAll -> InputAction.KeyEvent(key = "u")
+        Command.PowerManagement_IncreasePowerWeapons -> InputAction.KeyEvent(key = "f5")
+        Command.PowerManagement_MaxPowerWeapons -> InputAction.KeyEvent(
             key = "f5",
             pressType = defaultHoldInfo
         )
-
-        is Command.PowerManagement.IncreasePowerEngines -> InputAction.KeyEvent(key = "f6")
-        is Command.PowerManagement.MaxPowerEngines -> InputAction.KeyEvent(
+        Command.PowerManagement_IncreasePowerEngines -> InputAction.KeyEvent(key = "f6")
+        Command.PowerManagement_MaxPowerEngines -> InputAction.KeyEvent(
             key = "f6",
             pressType = defaultHoldInfo
         )
-
-        is Command.PowerManagement.IncreasePowerShields -> InputAction.KeyEvent(key = "f7")
-        is Command.PowerManagement.MaxPowerShields -> InputAction.KeyEvent(
+        Command.PowerManagement_IncreasePowerShields -> InputAction.KeyEvent(key = "f7")
+        Command.PowerManagement_MaxPowerShields -> InputAction.KeyEvent(
             key = "f7",
             pressType = defaultHoldInfo
         )
-
-        is Command.PowerManagement.ResetPowerDistribution -> InputAction.KeyEvent(key = "f8")
-        is Command.PowerManagement.DecreasePowerWeapons -> InputAction.KeyEvent(
+        Command.PowerManagement_ResetPowerDistribution -> InputAction.KeyEvent(key = "f8")
+        Command.PowerManagement_DecreasePowerWeapons -> InputAction.KeyEvent(
             key = "f5",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-
-        is Command.PowerManagement.MinPowerWeapons -> InputAction.KeyEvent(
+        Command.PowerManagement_MinPowerWeapons -> InputAction.KeyEvent(
             key = "f5",
             modifiers = listOf(ModifierKeys.ALT_LEFT),
             pressType = defaultHoldInfo
         )
-
-        is Command.PowerManagement.DecreasePowerEngines -> InputAction.KeyEvent(
+        Command.PowerManagement_DecreasePowerEngines -> InputAction.KeyEvent(
             key = "f6",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-
-        is Command.PowerManagement.MinPowerEngines -> InputAction.KeyEvent(
+        Command.PowerManagement_MinPowerEngines -> InputAction.KeyEvent(
             key = "f6",
             modifiers = listOf(ModifierKeys.ALT_LEFT),
             pressType = defaultHoldInfo
         )
-
-        is Command.PowerManagement.DecreasePowerShields -> InputAction.KeyEvent(
+        Command.PowerManagement_DecreasePowerShields -> InputAction.KeyEvent(
             key = "f7",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-
-        is Command.PowerManagement.MinPowerShields -> InputAction.KeyEvent(
+        Command.PowerManagement_MinPowerShields -> InputAction.KeyEvent(
             key = "f7",
             modifiers = listOf(ModifierKeys.ALT_LEFT),
             pressType = defaultHoldInfo
         )
-        // New Power Commands (mapped to existing where appropriate)
-        is Command.PowerManagement.PowerTrianglePresetWeapons -> InputAction.KeyEvent(key = "f5") // Tap F5
-        is Command.PowerManagement.PowerTrianglePresetEngines -> InputAction.KeyEvent(key = "f6") // Tap F6
-        is Command.PowerManagement.PowerTrianglePresetShields -> InputAction.KeyEvent(key = "f7") // Tap F7
-        is Command.PowerManagement.PowerTriangleReset -> InputAction.KeyEvent(key = "f8") // Tap F8
-
+        Command.PowerManagement_PowerTrianglePresetWeapons -> InputAction.KeyEvent(key = "f5") // Tap F5
+        Command.PowerManagement_PowerTrianglePresetEngines -> InputAction.KeyEvent(key = "f6") // Tap F6
+        Command.PowerManagement_PowerTrianglePresetShields -> InputAction.KeyEvent(key = "f7") // Tap F7
+        Command.PowerManagement_PowerTriangleReset -> InputAction.KeyEvent(key = "f8") // Tap F8
 
         // --- Targeting ---
-        is Command.Targeting.LockSelectedTarget -> InputAction.KeyEvent(key = "t") // Tap T
-        is Command.Targeting.UnlockLockedTarget -> InputAction.KeyEvent(
+        Command.Targeting_LockSelectedTarget -> InputAction.KeyEvent(key = "t") // Tap T
+        Command.Targeting_UnlockLockedTarget -> InputAction.KeyEvent(
             key = "t",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+T
-
-        is Command.Targeting.CycleLockHostilesNext -> InputAction.KeyEvent(key = "5") // Tap 5
-        is Command.Targeting.CycleLockHostilesClosest -> InputAction.KeyEvent(
+        Command.Targeting_CycleLockHostilesNext -> InputAction.KeyEvent(key = "5") // Tap 5
+        Command.Targeting_CycleLockHostilesClosest -> InputAction.KeyEvent(
             key = "5",
             pressType = defaultHoldInfo
         ) // Hold 5
-
-        is Command.Targeting.CycleLockFriendliesNext -> InputAction.KeyEvent(key = "6") // Tap 6
-        is Command.Targeting.CycleLockFriendliesClosest -> InputAction.KeyEvent(
+        Command.Targeting_CycleLockFriendliesNext -> InputAction.KeyEvent(key = "6") // Tap 6
+        Command.Targeting_CycleLockFriendliesClosest -> InputAction.KeyEvent(
             key = "6",
             pressType = defaultHoldInfo
         ) // Hold 6
-
-        is Command.Targeting.CycleLockAllNext -> InputAction.KeyEvent(key = "7") // Tap 7
-        is Command.Targeting.CycleLockAllClosest -> InputAction.KeyEvent(
+        Command.Targeting_CycleLockAllNext -> InputAction.KeyEvent(key = "7") // Tap 7
+        Command.Targeting_CycleLockAllClosest -> InputAction.KeyEvent(
             key = "7",
             pressType = defaultHoldInfo
         ) // Hold 7
-
-        is Command.Targeting.CycleLockAttackersNext -> InputAction.KeyEvent(key = "4") // Tap 4
-        is Command.Targeting.CycleLockAttackersClosest -> InputAction.KeyEvent(
+        Command.Targeting_CycleLockAttackersNext -> InputAction.KeyEvent(key = "4") // Tap 4
+        Command.Targeting_CycleLockAttackersClosest -> InputAction.KeyEvent(
             key = "4",
             pressType = defaultHoldInfo
         ) // Hold 4
-
-        is Command.Targeting.CycleLockSubtargetsNext -> InputAction.KeyEvent(key = "r") // Tap R
-        is Command.Targeting.ResetSubtargetToMain -> InputAction.KeyEvent(
+        Command.Targeting_CycleLockSubtargetsNext -> InputAction.KeyEvent(key = "r") // Tap R
+        Command.Targeting_ResetSubtargetToMain -> InputAction.KeyEvent(
             key = "r",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+R
-
-        is Command.Targeting.PinTarget1 -> InputAction.KeyEvent(
+        Command.Targeting_PinTarget1 -> InputAction.KeyEvent(
             key = "1",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+1
-
-        is Command.Targeting.PinTarget2 -> InputAction.KeyEvent(
+        Command.Targeting_PinTarget2 -> InputAction.KeyEvent(
             key = "2",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+2
-
-        is Command.Targeting.PinTarget3 -> InputAction.KeyEvent(
+        Command.Targeting_PinTarget3 -> InputAction.KeyEvent(
             key = "3",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+3
-
-        is Command.Targeting.RemoveAllPinnedTargets -> InputAction.KeyEvent(
+        Command.Targeting_RemoveAllPinnedTargets -> InputAction.KeyEvent(
             key = "0",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+0
-        is Command.Targeting.ToggleLookAhead -> InputAction.KeyEvent(
+        Command.Targeting_ToggleLookAhead -> InputAction.KeyEvent(
             key = "l",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+L (Look behind?)
-
-        // New Targeting Commands (mapped to existing where appropriate)
-        is Command.Targeting.TargetNearestHostile -> InputAction.KeyEvent(key = "5") // Tap 5
-        is Command.Targeting.CycleTargetsForward -> InputAction.KeyEvent(key = "t") // Tap T
-        is Command.Targeting.CycleTargetsBackward -> InputAction.KeyEvent(key = "y") // Tap Y (needs binding)
-        is Command.Targeting.CycleSubtargetsForward -> InputAction.KeyEvent(key = "r") // Tap R
-        is Command.Targeting.CycleSubtargetsBackward -> InputAction.KeyEvent(
+        Command.Targeting_TargetNearestHostile -> InputAction.KeyEvent(key = "5") // Tap 5
+        Command.Targeting_CycleTargetsForward -> InputAction.KeyEvent(key = "t") // Tap T
+        Command.Targeting_CycleTargetsBackward -> InputAction.KeyEvent(key = "y") // Tap Y (needs binding)
+        Command.Targeting_CycleSubtargetsForward -> InputAction.KeyEvent(key = "r") // Tap R
+        Command.Targeting_CycleSubtargetsBackward -> InputAction.KeyEvent(
             key = "r",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+R
-        is Command.Targeting.PinSelectedTarget -> InputAction.KeyEvent(
+        Command.Targeting_PinSelectedTarget -> InputAction.KeyEvent(
             key = "1",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+1
-        is Command.Targeting.UnpinSelectedTarget -> InputAction.KeyEvent(
+        Command.Targeting_UnpinSelectedTarget -> InputAction.KeyEvent(
             key = "0",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+0
 
-
         // --- Combat (Pilot Weapons) ---
-        is Command.CombatPilot.FireWeaponGroup1 -> InputAction.MouseEvent(MouseButton.LEFT)
-        is Command.CombatPilot.FireWeaponGroup2 -> InputAction.MouseEvent(MouseButton.RIGHT)
-        is Command.CombatPilot.CycleGimbalMode -> InputAction.KeyEvent(key = "g") // Tap G (Long press handled differently if needed)
-        is Command.CombatPilot.ToggleMissileOperatorMode -> InputAction.MouseEvent(MouseButton.MIDDLE)
-        is Command.CombatPilot.LaunchMissile -> InputAction.MouseEvent(MouseButton.LEFT) // In Missile Mode
-        is Command.CombatPilot.CycleMissileType -> InputAction.KeyEvent(key = "g") // Tap G cycles missiles too
-        is Command.CombatPilot.IncreaseArmedMissiles -> InputAction.KeyEvent(key = "g") // Tap G
-        is Command.CombatPilot.ResetArmedMissiles -> InputAction.KeyEvent(
+        Command.CombatPilot_FireWeaponGroup1 -> InputAction.MouseEvent(MouseButton.LEFT)
+        Command.CombatPilot_FireWeaponGroup2 -> InputAction.MouseEvent(MouseButton.RIGHT)
+        Command.CombatPilot_CycleGimbalMode -> InputAction.KeyEvent(key = "g") // Tap G (Long press handled differently if needed)
+        Command.CombatPilot_ToggleMissileOperatorMode -> InputAction.MouseEvent(MouseButton.MIDDLE)
+        Command.CombatPilot_LaunchMissile -> InputAction.MouseEvent(MouseButton.LEFT) // In Missile Mode
+        Command.CombatPilot_CycleMissileType -> InputAction.KeyEvent(key = "g") // Tap G cycles missiles too
+        Command.CombatPilot_IncreaseArmedMissiles -> InputAction.KeyEvent(key = "g") // Tap G
+        Command.CombatPilot_ResetArmedMissiles -> InputAction.KeyEvent(
             key = "g",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // Alt+G
-        // New Combat Commands
-        is Command.CombatPilot.CycleFireMode -> InputAction.KeyEvent(key = "v") // Tap V (needs binding)
-
+        Command.CombatPilot_CycleFireMode -> InputAction.KeyEvent(key = "v") // Tap V (needs binding)
 
         // --- Countermeasures ---
-        is Command.Countermeasures.DeployDecoyPanic -> InputAction.KeyEvent(key = "h") // Tap H
-        is Command.Countermeasures.DeployDecoyBurst -> InputAction.KeyEvent(key = "h") // Tap H
-        is Command.Countermeasures.SetLaunchDecoyBurst -> InputAction.KeyEvent(
+        Command.Countermeasures_DeployDecoyPanic -> InputAction.KeyEvent(key = "h") // Tap H
+        Command.Countermeasures_DeployDecoyBurst -> InputAction.KeyEvent(key = "h") // Tap H
+        Command.Countermeasures_SetLaunchDecoyBurst -> InputAction.KeyEvent(
             key = "h",
             pressType = setLaunchDecoyHoldInfo
         ) // Hold H
-
-        is Command.Countermeasures.IncreaseDecoyBurstSize -> InputAction.KeyEvent(
+        Command.Countermeasures_IncreaseDecoyBurstSize -> InputAction.KeyEvent(
             key = "h",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         ) // RAlt+H
-
-        is Command.Countermeasures.DecreaseDecoyBurstSize -> InputAction.KeyEvent(
+        Command.Countermeasures_DecreaseDecoyBurstSize -> InputAction.KeyEvent(
             key = "h",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         ) // LAlt+H
-
-        is Command.Countermeasures.DeployNoise -> InputAction.KeyEvent(key = "j") // Tap J
-        // New CM Commands (mapped)
-        is Command.Countermeasures.LaunchDecoy -> InputAction.KeyEvent(key = "h") // Tap H
-        is Command.Countermeasures.LaunchNoise -> InputAction.KeyEvent(key = "j") // Tap J
-
+        Command.Countermeasures_DeployNoise -> InputAction.KeyEvent(key = "j") // Tap J
+        Command.Countermeasures_LaunchDecoy -> InputAction.KeyEvent(key = "h") // Tap H
+        Command.Countermeasures_LaunchNoise -> InputAction.KeyEvent(key = "j") // Tap J
 
         // --- Scanning ---
-        is Command.Scanning.ToggleScanningMode -> InputAction.KeyEvent(key = "v")
-        is Command.Scanning.ActivatePing -> InputAction.KeyEvent(key = "tab")
-        is Command.Scanning.ActivateScanTargeted -> InputAction.MouseEvent(MouseButton.LEFT) // In Scan Mode
-        is Command.Scanning.IncreaseScanAngleFocus -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
-        is Command.Scanning.DecreaseScanAngleFocus -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
+        Command.Scanning_ToggleScanningMode -> InputAction.KeyEvent(key = "v")
+        Command.Scanning_ActivatePing -> InputAction.KeyEvent(key = "tab")
+        Command.Scanning_ActivateScanTargeted -> InputAction.MouseEvent(MouseButton.LEFT) // In Scan Mode
+        Command.Scanning_IncreaseScanAngleFocus -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
+        Command.Scanning_DecreaseScanAngleFocus -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
 
         // --- General Cockpit ---
-        is Command.GeneralCockpit.FlightReady -> InputAction.KeyEvent(key = "r")
-        is Command.GeneralCockpit.ExitSeat -> InputAction.KeyEvent(
+        Command.GeneralCockpit_FlightReady -> InputAction.KeyEvent(key = "r")
+        Command.GeneralCockpit_ExitSeat -> InputAction.KeyEvent(
             key = "y",
             pressType = exitSeatHoldInfo
         ) // Hold Y
-
-        is Command.GeneralCockpit.Eject -> InputAction.KeyEvent(
+        Command.GeneralCockpit_Eject -> InputAction.KeyEvent(
             key = "y",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         ) // RAlt+Y
-
-        is Command.GeneralCockpit.SelfDestruct -> InputAction.KeyEvent(
+        Command.GeneralCockpit_SelfDestruct -> InputAction.KeyEvent(
             key = "backspace",
             pressType = selfDestructHoldInfo
         ) // Hold Backspace
-
-        is Command.GeneralCockpit.EmergencyExitSeat -> InputAction.KeyEvent(
+        Command.GeneralCockpit_EmergencyExitSeat -> InputAction.KeyEvent(
             key = "u",
             modifiers = listOf(ModifierKeys.SHIFT_LEFT)
         ) // U+LShift
-
-        is Command.GeneralCockpit.TogglePortLockAll -> InputAction.KeyEvent(
+        Command.GeneralCockpit_TogglePortLockAll -> InputAction.KeyEvent(
             key = "k",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         ) // RAlt+K (Lock Vehicle)
-
-        is Command.GeneralCockpit.ToggleAllDoors -> null // Requires manual binding
-        is Command.GeneralCockpit.ToggleLockAllDoors -> null // Requires manual binding
-        // New General Commands (mapped where possible)
-        is Command.GeneralCockpit.OpenAllDoors -> null // Map to ToggleAllDoors if bound
-        is Command.GeneralCockpit.CloseAllDoors -> null // Map to ToggleAllDoors if bound
-        is Command.GeneralCockpit.LockDoors -> InputAction.KeyEvent(
+        Command.GeneralCockpit_ToggleAllDoors -> null // Requires manual binding
+        Command.GeneralCockpit_ToggleLockAllDoors -> null // Requires manual binding
+        Command.GeneralCockpit_OpenAllDoors -> null // Map to ToggleAllDoors if bound
+        Command.GeneralCockpit_CloseAllDoors -> null // Map to ToggleAllDoors if bound
+        Command.GeneralCockpit_LockDoors -> InputAction.KeyEvent(
             key = "k",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         ) // Map to TogglePortLockAll
-        is Command.GeneralCockpit.UnlockDoors -> InputAction.KeyEvent(
+        Command.GeneralCockpit_UnlockDoors -> InputAction.KeyEvent(
             key = "k",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         ) // Map to TogglePortLockAll
 
-
-        // --- Ship Salvage --- (Keep existing mappings)
-        is Command.ShipSalvage.ToggleSalvageMode -> InputAction.KeyEvent(key = "m")
-        is Command.ShipSalvage.ToggleSalvageGimbal -> InputAction.KeyEvent(key = "g")
-        is Command.ShipSalvage.ResetSalvageGimbal -> InputAction.KeyEvent(
+        // --- Ship Salvage ---
+        Command.ShipSalvage_ToggleSalvageMode -> InputAction.KeyEvent(key = "m")
+        Command.ShipSalvage_ToggleSalvageGimbal -> InputAction.KeyEvent(key = "g")
+        Command.ShipSalvage_ResetSalvageGimbal -> InputAction.KeyEvent(
             key = "g",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipSalvage.ToggleSalvageBeamFocused -> InputAction.MouseEvent(MouseButton.LEFT)
-        is Command.ShipSalvage.ToggleSalvageBeamLeft -> InputAction.KeyEvent(
+        Command.ShipSalvage_ToggleSalvageBeamFocused -> InputAction.MouseEvent(MouseButton.LEFT)
+        Command.ShipSalvage_ToggleSalvageBeamLeft -> InputAction.KeyEvent(
             key = "a",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         )
-        is Command.ShipSalvage.ToggleSalvageBeamRight -> InputAction.KeyEvent(
+        Command.ShipSalvage_ToggleSalvageBeamRight -> InputAction.KeyEvent(
             key = "d",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         )
-        is Command.ShipSalvage.ToggleSalvageBeamFracture -> InputAction.KeyEvent(
+        Command.ShipSalvage_ToggleSalvageBeamFracture -> InputAction.KeyEvent(
             key = "w",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         )
-        is Command.ShipSalvage.ToggleSalvageBeamDisintegrate -> InputAction.KeyEvent(
+        Command.ShipSalvage_ToggleSalvageBeamDisintegrate -> InputAction.KeyEvent(
             key = "s",
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         )
-        is Command.ShipSalvage.CycleSalvageModifiers -> InputAction.MouseEvent(MouseButton.RIGHT)
-        is Command.ShipSalvage.AdjustSalvageBeamSpacingUp -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
-        is Command.ShipSalvage.AdjustSalvageBeamSpacingDown -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
-        is Command.ShipSalvage.ToggleSalvageBeamAxis -> InputAction.MouseEvent(
+        Command.ShipSalvage_CycleSalvageModifiers -> InputAction.MouseEvent(MouseButton.RIGHT)
+        Command.ShipSalvage_AdjustSalvageBeamSpacingUp -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
+        Command.ShipSalvage_AdjustSalvageBeamSpacingDown -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
+        Command.ShipSalvage_ToggleSalvageBeamAxis -> InputAction.MouseEvent(
             button = MouseButton.RIGHT,
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipSalvage.FocusSalvageHeadsAll -> InputAction.KeyEvent(
+        Command.ShipSalvage_FocusSalvageHeadsAll -> InputAction.KeyEvent(
             key = "s",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipSalvage.FocusSalvageHeadLeft -> InputAction.KeyEvent(
+        Command.ShipSalvage_FocusSalvageHeadLeft -> InputAction.KeyEvent(
             key = "a",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipSalvage.FocusSalvageHeadRight -> InputAction.KeyEvent(
+        Command.ShipSalvage_FocusSalvageHeadRight -> InputAction.KeyEvent(
             key = "d",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipSalvage.FocusSalvageToolFracture -> InputAction.KeyEvent(
+        Command.ShipSalvage_FocusSalvageToolFracture -> InputAction.KeyEvent(
             key = "w",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipSalvage.IncreaseSalvageBeamSpacing -> null
-        is Command.ShipSalvage.DecreaseSalvageBeamSpacing -> null
-        is Command.ShipSalvage.SetAbsoluteSalvageBeamSpacing -> null
+        Command.ShipSalvage_IncreaseSalvageBeamSpacing -> null
+        Command.ShipSalvage_DecreaseSalvageBeamSpacing -> null
+        Command.ShipSalvage_SetAbsoluteSalvageBeamSpacing -> null
 
-        // --- Ship Mining --- (Keep existing mappings)
-        is Command.ShipMining.ToggleMiningMode -> InputAction.KeyEvent(key = "m")
-        is Command.ShipMining.FireMiningLaser -> InputAction.MouseEvent(MouseButton.LEFT)
-        is Command.ShipMining.SwitchMiningLaser -> InputAction.MouseEvent(
+        // --- Ship Mining ---
+        Command.ShipMining_ToggleMiningMode -> InputAction.KeyEvent(key = "m")
+        Command.ShipMining_FireMiningLaser -> InputAction.MouseEvent(MouseButton.LEFT)
+        Command.ShipMining_SwitchMiningLaser -> InputAction.MouseEvent(
             button = MouseButton.LEFT,
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipMining.IncreaseMiningLaserPower -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
-        is Command.ShipMining.DecreaseMiningLaserPower -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
-        is Command.ShipMining.CycleMiningLaserGimbal -> InputAction.KeyEvent(key = "g")
-        is Command.ShipMining.ActivateMiningConsumable1 -> InputAction.KeyEvent(
+        Command.ShipMining_IncreaseMiningLaserPower -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.UP)
+        Command.ShipMining_DecreaseMiningLaserPower -> InputAction.MouseScroll(direction = InputAction.MouseScroll.Direction.DOWN)
+        Command.ShipMining_CycleMiningLaserGimbal -> InputAction.KeyEvent(key = "g")
+        Command.ShipMining_ActivateMiningConsumable1 -> InputAction.KeyEvent(
             key = "1",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipMining.ActivateMiningConsumable2 -> InputAction.KeyEvent(
+        Command.ShipMining_ActivateMiningConsumable2 -> InputAction.KeyEvent(
             key = "2",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipMining.ActivateMiningConsumable3 -> InputAction.KeyEvent(
+        Command.ShipMining_ActivateMiningConsumable3 -> InputAction.KeyEvent(
             key = "3",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.ShipMining.JettisonCargo -> InputAction.KeyEvent(
+        Command.ShipMining_JettisonCargo -> InputAction.KeyEvent(
             key = "j",
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
 
-        // --- Turret Gunner Systems --- (Keep existing mappings)
-        is Command.Turret.ToggleTurretAimMode -> InputAction.KeyEvent(key = "q")
-        is Command.Turret.RecenterTurret -> InputAction.KeyEvent(
+        // --- Turret Gunner Systems ---
+        Command.Turret_ToggleTurretAimMode -> InputAction.KeyEvent(key = "q")
+        Command.Turret_RecenterTurret -> InputAction.KeyEvent(
             key = "c",
             pressType = recenterTurretHoldInfo
         )
-        is Command.Turret.ChangeTurretPosition -> InputAction.KeyEvent(key = "s")
-        is Command.Turret.AdjustTurretSpeedLimiterUp -> InputAction.MouseScroll(
+        Command.Turret_ChangeTurretPosition -> InputAction.KeyEvent(key = "s")
+        Command.Turret_AdjustTurretSpeedLimiterUp -> InputAction.MouseScroll(
             direction = InputAction.MouseScroll.Direction.UP,
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.Turret.AdjustTurretSpeedLimiterDown -> InputAction.MouseScroll(
+        Command.Turret_AdjustTurretSpeedLimiterDown -> InputAction.MouseScroll(
             direction = InputAction.MouseScroll.Direction.DOWN,
             modifiers = listOf(ModifierKeys.ALT_LEFT)
         )
-        is Command.Turret.FireTurretWeapons -> InputAction.MouseEvent(MouseButton.LEFT)
-        is Command.Turret.ToggleTurretPrecisionTargeting -> InputAction.MouseEvent(MouseButton.RIGHT)
-        is Command.Turret.ZoomTurretPrecisionTargeting -> InputAction.MouseEvent(
+        Command.Turret_FireTurretWeapons -> InputAction.MouseEvent(MouseButton.LEFT)
+        Command.Turret_ToggleTurretPrecisionTargeting -> InputAction.MouseEvent(MouseButton.RIGHT)
+        Command.Turret_ZoomTurretPrecisionTargeting -> InputAction.MouseEvent(
             button = MouseButton.RIGHT,
             pressType = zoomTurretHoldInfo
         )
-        is Command.Turret.CycleTurretPrecisionMode -> InputAction.MouseEvent(
+        Command.Turret_CycleTurretPrecisionMode -> InputAction.MouseEvent(
             button = MouseButton.RIGHT,
             modifiers = listOf(ModifierKeys.ALT_RIGHT)
         )
-        is Command.Turret.ToggleTurretGyroStabilization -> InputAction.KeyEvent(key = "e")
-        is Command.Turret.SwitchToNextRemoteTurret -> InputAction.KeyEvent(key = "d")
-        is Command.Turret.SwitchToPreviousRemoteTurret -> InputAction.KeyEvent(key = "a")
-        is Command.Turret.ExitTurret -> InputAction.KeyEvent(
+        Command.Turret_ToggleTurretGyroStabilization -> InputAction.KeyEvent(key = "e")
+        Command.Turret_SwitchToNextRemoteTurret -> InputAction.KeyEvent(key = "d")
+        Command.Turret_SwitchToPreviousRemoteTurret -> InputAction.KeyEvent(key = "a")
+        Command.Turret_ExitTurret -> InputAction.KeyEvent(
             key = "y",
             pressType = exitSeatHoldInfo
         )
-        is Command.Turret.CycleTurretFireMode -> null
-        is Command.Turret.ToggleTurretESP -> null
+        Command.Turret_CycleTurretFireMode -> null
+        Command.Turret_ToggleTurretESP -> null
 
-        // else -> null // Optional default case if you want to explicitly handle unmapped commands
+        // Default case for unmapped identifiers
+        else -> {
+            Log.w("KeyMapper", "No InputAction mapped for command identifier: $commandIdentifier")
+            null
+        }
     }
 }

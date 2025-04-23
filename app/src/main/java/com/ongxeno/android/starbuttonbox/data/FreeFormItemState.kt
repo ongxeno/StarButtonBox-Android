@@ -50,29 +50,4 @@ data class FreeFormItemState(
     @kotlinx.serialization.Transient
     val height: Dp
         get() = Dp(heightDp)
-
-    // Helper function to create a state with Offset and Dp
-    companion object {
-        fun from(
-            text: String,
-            command: Command, // Takes the Command object
-            offset: Offset = Offset.Zero,
-            width: Dp = 120.dp,
-            height: Dp = 50.dp,
-            type: FreeFormItemType = FreeFormItemType.MOMENTARY_BUTTON,
-            id: String = UUID.randomUUID().toString()
-        ): FreeFormItemState {
-            return FreeFormItemState(
-                id = id,
-                type = type,
-                text = text,
-                // Store the unique commandString from the Command object
-                commandString = command.commandString,
-                offsetX = offset.x,
-                offsetY = offset.y,
-                widthDp = width.value,
-                heightDp = height.value
-            )
-        }
-    }
 }

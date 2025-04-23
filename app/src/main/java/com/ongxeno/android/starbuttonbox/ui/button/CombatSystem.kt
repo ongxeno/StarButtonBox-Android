@@ -20,7 +20,7 @@ import com.ongxeno.android.starbuttonbox.data.Command
 
 @Composable
 fun CombatSystemsBlock(
-    sendCommand: (Command) -> Unit,
+    sendCommand: (String) -> Unit,
 ) {
     val powerInfoMsg = "Note: +/- Power may require MFD mapping or macros."
 
@@ -48,15 +48,15 @@ fun CombatSystemsBlock(
             MomentaryButton(
                 text = "PANIC",
                 modifier = Modifier.weight(1f),
-                onPress = { sendCommand(Command.Countermeasures.DeployDecoyPanic) })
+                onPress = { sendCommand(Command.Countermeasures_DeployDecoyPanic) })
             MomentaryButton(
                 text = "DECOY",
                 modifier = Modifier.weight(1f),
-                onPress = { sendCommand(Command.Countermeasures.DeployDecoyBurst) })
+                onPress = { sendCommand(Command.Countermeasures_DeployDecoyBurst) })
             MomentaryButton(
                 text = "NOISE",
                 modifier = Modifier.weight(1f),
-                onPress = { sendCommand(Command.Countermeasures.DeployNoise) })
+                onPress = { sendCommand(Command.Countermeasures_DeployNoise) })
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -72,21 +72,21 @@ fun CombatSystemsBlock(
             // Each ComponentPowerControl is now a vertical stack, placed side-by-side
             ComponentPowerControl(
                 componentName = "WEAPONS",
-                onIncrease = { sendCommand(Command.PowerManagement.IncreasePowerWeapons) },
-                onDecrease = { sendCommand(Command.PowerManagement.DecreasePowerWeapons) },
-                onActionClick = { sendCommand(Command.PowerManagement.TogglePowerWeapons) }
+                onIncrease = { sendCommand(Command.PowerManagement_IncreasePowerWeapons) },
+                onDecrease = { sendCommand(Command.PowerManagement_DecreasePowerWeapons) },
+                onActionClick = { sendCommand(Command.PowerManagement_TogglePowerWeapons) }
             )
             ComponentPowerControl(
                 componentName = "SHIELDS",
-                onIncrease = { sendCommand(Command.PowerManagement.IncreasePowerShields) },
-                onDecrease = { sendCommand(Command.PowerManagement.DecreasePowerShields) },
-                onActionClick = { sendCommand(Command.PowerManagement.TogglePowerShields) }
+                onIncrease = { sendCommand(Command.PowerManagement_IncreasePowerShields) },
+                onDecrease = { sendCommand(Command.PowerManagement_DecreasePowerShields) },
+                onActionClick = { sendCommand(Command.PowerManagement_TogglePowerShields) }
             )
             ComponentPowerControl(
                 componentName = "ENGINES",
-                onIncrease = { sendCommand(Command.PowerManagement.IncreasePowerEngines) },
-                onDecrease = { sendCommand(Command.PowerManagement.DecreasePowerEngines) },
-                onActionClick = { sendCommand(Command.PowerManagement.TogglePowerEngines) }
+                onIncrease = { sendCommand(Command.PowerManagement_IncreasePowerEngines) },
+                onDecrease = { sendCommand(Command.PowerManagement_DecreasePowerEngines) },
+                onActionClick = { sendCommand(Command.PowerManagement_TogglePowerEngines) }
             )
         }
     }

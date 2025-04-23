@@ -49,15 +49,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ongxeno.android.starbuttonbox.data.Command
+// Removed Command import
 import com.ongxeno.android.starbuttonbox.datasource.ConfigDatasource
-import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource // Import LayoutDatasource
+import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource
 import com.ongxeno.android.starbuttonbox.datasource.TabDatasource
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.setting.SettingsDialog
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
-import com.ongxeno.android.starbuttonbox.utils.LocalLayoutDatasource // Import the CompositionLocal key
+import com.ongxeno.android.starbuttonbox.utils.LocalLayoutDatasource
 import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer
 import com.ongxeno.android.starbuttonbox.utils.LocalVibrator
 import com.ongxeno.android.starbuttonbox.utils.NestedCompositionLocalProvider
@@ -78,23 +78,21 @@ class MainActivity : ComponentActivity() {
             HideSystemBarsEffect()
 
             StarButtonBoxTheme {
-                val context = LocalContext.current.applicationContext // Use application context
+                val context = LocalContext.current.applicationContext
                 val soundPlayer = rememberSoundPlayer()
                 val vibratorManager = remember { getVibratorManager(context) }
-                // Instantiate LayoutDatasource here
                 val layoutDatasource = remember { LayoutDatasource(context) }
 
-                // Provide all CompositionLocals using the nested provider
                 NestedCompositionLocalProvider(
                     LocalSoundPlayer provides soundPlayer,
                     LocalVibrator provides vibratorManager,
-                    LocalLayoutDatasource provides layoutDatasource // Provide LayoutDatasource
+                    LocalLayoutDatasource provides layoutDatasource
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        StarCitizenButtonBoxApp() // Pass dependencies implicitly now
+                        StarCitizenButtonBoxApp()
                     }
                 }
             }
@@ -109,9 +107,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/**
- * Composable effect to manage hiding system bars based on lifecycle events.
- */
 @Composable
 private fun HideSystemBarsEffect() {
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -128,7 +123,6 @@ private fun HideSystemBarsEffect() {
                 windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
             }
         }
-        // Initial hide
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
@@ -143,16 +137,8 @@ private fun HideSystemBarsEffect() {
 fun StarCitizenButtonBoxApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // --- Datasource Instantiation ---
-    // ConfigDatasource is still needed for network settings
     val configDatasource = remember { ConfigDatasource(context.applicationContext) }
-    // LayoutDatasource is now provided via CompositionLocal, no need to instantiate here
-
-    val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(
-        initialValue = null
-    )
-
+    val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(initialValue = null)
     var showSettingsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(targetNetworkConfig) {
@@ -169,9 +155,11 @@ fun StarCitizenButtonBoxApp() {
         }
     }
 
-    val handleCommand = { command: Command ->
+    // Command handler lambda now accepts a String identifier
+    val handleCommand = { commandIdentifier: String ->
         if (udpSender != null) {
-            udpSender.sendCommandAction(command)
+            // Pass the identifier string directly to UdpSender
+            udpSender.sendCommandAction(commandIdentifier)
         } else {
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "Settings required", Toast.LENGTH_SHORT).show()
@@ -181,18 +169,13 @@ fun StarCitizenButtonBoxApp() {
         Unit
     }
 
-    // Tab Definitions and State
-    // Get tabs without passing datasource explicitly
+    // Tab Definitions and State (TabDatasource now uses the String lambda)
     val tabItems = remember { TabDatasource.getTabs() }
     var selectedTabIndex by remember { mutableStateOf(0) }
 
     // --- Main UI Structure ---
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-    ) {
-        // Top Bar (Tabs + Settings)
+    Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        // Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -201,28 +184,21 @@ fun StarCitizenButtonBoxApp() {
                 .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Scrollable Tab Buttons
+            // Scrollable Tabs
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 tabItems.forEachIndexed { index, tabInfo ->
-                    IconButton(
-                        onClick = { selectedTabIndex = index },
-                        modifier = Modifier.size(48.dp)
-                    ) {
+                    IconButton(onClick = { selectedTabIndex = index }, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = tabInfo.icon,
                             contentDescription = tabInfo.title,
-                            tint = if (selectedTabIndex == index) MaterialTheme.colorScheme.primary
-                            else Color.White.copy(alpha = 0.7f)
+                            tint = if (selectedTabIndex == index) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
                         )
                     }
                 }
             }
-
             // Settings Button
             IconButton(onClick = { showSettingsDialog = true }) {
                 Icon(Icons.Filled.Settings, "Settings", tint = Color.White)
@@ -237,23 +213,21 @@ fun StarCitizenButtonBoxApp() {
         ) {
             if (selectedTabIndex >= 0 && selectedTabIndex < tabItems.size) {
                 val selectedTab = tabItems[selectedTabIndex]
-                selectedTab.content(handleCommand) // Pass the command handler
+                // Pass the updated handleCommand lambda (String) -> Unit
+                selectedTab.content(handleCommand)
             } else {
                 PlaceholderLayout("Error: Invalid Tab Index")
             }
         }
     }
 
-    // --- Conditionally display the Settings Dialog ---
+    // --- Settings Dialog ---
     if (showSettingsDialog) {
         SettingsDialog(
             onDismissRequest = {
                 targetNetworkConfig?.let { (ip, port) ->
-                    if (ip != null && port != null) {
-                        showSettingsDialog = false
-                    } else {
-                        Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT).show()
-                    }
+                    if (ip != null && port != null) showSettingsDialog = false
+                    else Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT).show()
                 } ?: Toast.makeText(context, "Loading Settings...", Toast.LENGTH_SHORT).show()
             },
             onSave = { ip, port ->
