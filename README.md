@@ -1,5 +1,9 @@
 # StarButtonBox
 
+<p align="center">
+  <img src="./app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" alt="App Icon">
+</p>
+
 ## Project Overview
 
 This project creates a virtual button box application for the game Star Citizen. It consists of two main parts:
