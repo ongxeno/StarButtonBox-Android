@@ -1,6 +1,7 @@
 /*
  * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/ui/dialog/AddEditButtonDialog.kt
- * Updates the dialog to include controls for text size and background color selection.
+ * Added Delete button, dismissible properties, Color Picker dialog integration,
+ * and visual feedback on the color picker button.
  */
 package com.ongxeno.android.starbuttonbox.ui.dialog
 
@@ -13,7 +14,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check // Icon for selected color
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ColorLens // Icon for color picker
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,43 +25,43 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp // Import sp for text size
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+// Import the custom color picker dialog
+import com.ongxeno.android.starbuttonbox.ui.dialog.CustomColorPickerDialog
 import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemType
-// Import the new ColorUtils object
 import com.ongxeno.android.starbuttonbox.utils.ColorUtils
 import com.ongxeno.android.starbuttonbox.utils.ColorUtils.toHexString
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditButtonDialog(
     showDialog: Boolean,
     onDismiss: () -> Unit,
-    // Updated onSave lambda to include new parameters
     onSave: (
         text: String,
         commandString: String,
         type: FreeFormItemType,
-        textSizeSp: Float?, // Nullable Float for text size
-        backgroundColorHex: String? // Nullable String for background color hex
+        textSizeSp: Float?,
+        backgroundColorHex: String?
     ) -> Unit,
-    initialItemState: FreeFormItemState? // The state being edited, or null if adding
+    initialItemState: FreeFormItemState?,
+    onDelete: (itemId: String) -> Unit
 ) {
-    if (!showDialog) return // Don't compose if the dialog shouldn't be shown
+    if (!showDialog) return
 
     val isEditMode = initialItemState != null
-    val allCommandIdentifiers = remember { Command.getAllCommandStrings() } // Get all available command strings
+    val allCommandIdentifiers = remember { Command.getAllCommandStrings() }
 
-    // --- Default values ---
-    // Define default values used when creating a *new* button or if state is somehow invalid
-    val defaultTextSizeSp = 14f // Default text size in sp
-    val defaultBackgroundColorHex = remember { ColorUtils.DefaultButtonBackground.toHexString() } // Get hex from ColorUtils default
+    val defaultTextSizeSp = 14f
+    val defaultBackgroundColorHex = remember { ColorUtils.DefaultButtonBackground.toHexString() }
+    // Combine default and standard colors for checking if a color is custom
+    val standardAndDefaultColors = remember { (ColorUtils.StandardColors + defaultBackgroundColorHex).toSet() }
 
-    // --- State Variables ---
-    // Use the initial state if editing, otherwise use defaults or empty strings
     var buttonText by remember(initialItemState?.id) { mutableStateOf(initialItemState?.text ?: "") }
     var selectedCommandString by remember(initialItemState?.id) {
         mutableStateOf(initialItemState?.commandString ?: allCommandIdentifiers.firstOrNull() ?: "")
@@ -68,11 +71,8 @@ fun AddEditButtonDialog(
     }
     var commandDropdownExpanded by remember { mutableStateOf(false) }
     var typeDropdownExpanded by remember { mutableStateOf(false) }
-    // Track if a valid command is selected for validation feedback
     var isCommandSelected by remember(selectedCommandString) { mutableStateOf(selectedCommandString.isNotEmpty()) }
 
-    // --- New State Variables for Customization ---
-    // Initialize with existing value if editing, otherwise use the defined defaults
     var selectedTextSizeSp by remember(initialItemState?.id) {
         mutableStateOf(initialItemState?.textSizeSp ?: defaultTextSizeSp)
     }
@@ -80,239 +80,226 @@ fun AddEditButtonDialog(
         mutableStateOf(initialItemState?.backgroundColorHex ?: defaultBackgroundColorHex)
     }
 
-    // --- Dropdown Height Calculation (Unchanged) ---
+    // State to track if the current selection is from the custom picker
+    var isCustomColorSelected by remember(initialItemState?.backgroundColorHex) {
+        mutableStateOf(
+            initialItemState?.backgroundColorHex != null &&
+                    !standardAndDefaultColors.contains(initialItemState.backgroundColorHex)
+        )
+    }
+
+    // State to control the visibility of the color picker dialog
+    var showColorPickerDialog by remember { mutableStateOf(false) }
+
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val dropdownContentMaxHeight = remember { (screenHeight * 0.4f).coerceAtMost(250.dp) }
 
-    // --- Dialog Composable ---
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false) // Standard dialog properties
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
     ) {
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
-            // Use a Column with verticalScroll to handle potentially long content
             Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                // Dialog Title
                 Text(
                     text = if (isEditMode) "Edit Button" else "Add Button",
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                // Button Text Input (Unchanged)
-                OutlinedTextField(
-                    value = buttonText,
-                    onValueChange = { buttonText = it },
-                    label = { Text("Button Label") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                // --- Form Fields (Omitted for brevity) ---
+                OutlinedTextField( /* Button Text */ value = buttonText, onValueChange = { buttonText = it }, label = { Text("Button Label") }, modifier = Modifier.fillMaxWidth(), singleLine = true )
                 Spacer(modifier = Modifier.height(16.dp))
-
-                // Command Selection Dropdown (Unchanged)
-                ExposedDropdownMenuBox(
-                    expanded = commandDropdownExpanded,
-                    onExpandedChange = { commandDropdownExpanded = !commandDropdownExpanded },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = selectedCommandString.ifEmpty { "Select Command" },
-                        onValueChange = {}, readOnly = true,
-                        label = { Text("Command") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = commandDropdownExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        isError = !isCommandSelected // Show error state if no command selected
-                    )
-                    ExposedDropdownMenu(
-                        expanded = commandDropdownExpanded,
-                        onDismissRequest = { commandDropdownExpanded = false },
-                        modifier = Modifier.heightIn(max = dropdownContentMaxHeight + 32.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(dropdownContentMaxHeight)
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            allCommandIdentifiers.forEach { commandId ->
-                                DropdownMenuItem(
-                                    text = { Text(commandId, style = MaterialTheme.typography.bodyMedium) },
-                                    onClick = {
-                                        selectedCommandString = commandId
-                                        isCommandSelected = true // Mark as selected
-                                        commandDropdownExpanded = false
-                                    },
-                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                                )
-                            }
+                ExposedDropdownMenuBox( /* Command Selection */ expanded = commandDropdownExpanded, onExpandedChange = { commandDropdownExpanded = !commandDropdownExpanded }, modifier = Modifier.fillMaxWidth() ) {
+                    OutlinedTextField( value = selectedCommandString.ifEmpty { "Select Command" }, onValueChange = {}, readOnly = true, label = { Text("Command") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = commandDropdownExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth(), isError = !isCommandSelected )
+                    ExposedDropdownMenu( expanded = commandDropdownExpanded, onDismissRequest = { commandDropdownExpanded = false }, modifier = Modifier.heightIn(max = dropdownContentMaxHeight + 32.dp) ) {
+                        Column( modifier = Modifier .fillMaxWidth() .height(dropdownContentMaxHeight) .verticalScroll(rememberScrollState()) ) {
+                            allCommandIdentifiers.forEach { commandId -> DropdownMenuItem( text = { Text(commandId, style = MaterialTheme.typography.bodyMedium) }, onClick = { selectedCommandString = commandId; isCommandSelected = true; commandDropdownExpanded = false }, contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding, ) }
                         }
                     }
                 }
-                // Validation message for command selection
-                if (!isCommandSelected) {
-                    Text("Please select a command", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp, top = 4.dp))
-                }
+                if (!isCommandSelected) { Text("Please select a command", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp, top = 4.dp)) }
                 Spacer(modifier = Modifier.height(16.dp))
-
-                // Button Type Selection Dropdown (Unchanged)
-                ExposedDropdownMenuBox(
-                    expanded = typeDropdownExpanded,
-                    onExpandedChange = { typeDropdownExpanded = !typeDropdownExpanded },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = selectedType.name, onValueChange = {}, readOnly = true,
-                        label = { Text("Button Type") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeDropdownExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = typeDropdownExpanded,
-                        onDismissRequest = { typeDropdownExpanded = false },
-                        modifier = Modifier.exposedDropdownSize(matchTextFieldWidth = true)
-                    ) {
-                        // Add more types here if they are introduced in FreeFormItemType
-                        DropdownMenuItem(
-                            text = { Text(FreeFormItemType.MOMENTARY_BUTTON.name) },
-                            onClick = { selectedType = FreeFormItemType.MOMENTARY_BUTTON; typeDropdownExpanded = false },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                ExposedDropdownMenuBox( /* Button Type */ expanded = typeDropdownExpanded, onExpandedChange = { typeDropdownExpanded = !typeDropdownExpanded }, modifier = Modifier.fillMaxWidth() ) {
+                    OutlinedTextField( value = selectedType.name, onValueChange = {}, readOnly = true, label = { Text("Button Type") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeDropdownExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth() )
+                    ExposedDropdownMenu( expanded = typeDropdownExpanded, onDismissRequest = { typeDropdownExpanded = false }, modifier = Modifier.exposedDropdownSize(matchTextFieldWidth = true) ) {
+                        DropdownMenuItem( text = { Text(FreeFormItemType.MOMENTARY_BUTTON.name) }, onClick = { selectedType = FreeFormItemType.MOMENTARY_BUTTON; typeDropdownExpanded = false }, modifier = Modifier.fillMaxWidth() )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp)) // Add spacing
-
-                // --- Text Size Selection Slider ---
-                Text(
-                    text = "Text Size (${selectedTextSizeSp.toInt()} sp)", // Display current value
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-                Slider(
-                    value = selectedTextSizeSp, // Current state
-                    onValueChange = { selectedTextSizeSp = it }, // Update state on change
-                    valueRange = 10f..30f, // Define min and max text size (e.g., 10sp to 30sp)
-                    steps = 19 // Number of steps between min and max (e.g., (30-10)/1 = 20 intervals -> 19 steps)
-                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text( /* Text Size */ text = "Text Size (${selectedTextSizeSp.toInt()} sp)", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 4.dp) )
+                Slider( /* Text Size Slider */ value = selectedTextSizeSp, onValueChange = { selectedTextSizeSp = it }, valueRange = 10f..30f, steps = 19, onValueChangeFinished = { if (abs(selectedTextSizeSp - 14f) < 2f) selectedTextSizeSp = 14f } ) // Snap example
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // --- Background Color Selection ---
                 Text("Background Color", style = MaterialTheme.typography.bodyLarge)
                 Spacer(modifier = Modifier.height(8.dp))
-                // Use a Row to display color options horizontally
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), // Add some padding
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), // Space out colors
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Box for resetting to the default color
+                    // Default Color Box
                     ColorSelectorBox(
-                        color = remember { ColorUtils.parseHexColor(defaultBackgroundColorHex) ?: Color.Transparent }, // Parse default hex
-                        hexColor = defaultBackgroundColorHex, // Pass the default hex string
-                        isSelected = selectedBackgroundColorHex == defaultBackgroundColorHex, // Check if it's selected
-                        onClick = { selectedBackgroundColorHex = defaultBackgroundColorHex } // Set state to default hex
+                        color = remember { ColorUtils.parseHexColor(defaultBackgroundColorHex) ?: Color.Transparent },
+                        hexColor = defaultBackgroundColorHex,
+                        isSelected = selectedBackgroundColorHex == defaultBackgroundColorHex && !isCustomColorSelected, // Only selected if not custom
+                        onClick = {
+                            selectedBackgroundColorHex = defaultBackgroundColorHex
+                            isCustomColorSelected = false // Selecting default/standard deselects custom
+                        }
                     )
-
-                    // Iterate through the standard colors defined in ColorUtils
+                    // Standard Colors
                     ColorUtils.StandardColors.forEach { hex ->
-                        // Parse the hex string to a Compose Color, remembering the result
                         val color = remember(hex) { ColorUtils.parseHexColor(hex) ?: Color.Transparent }
                         ColorSelectorBox(
                             color = color,
-                            hexColor = hex, // Pass the current hex string
-                            isSelected = selectedBackgroundColorHex == hex, // Check if it's selected
-                            onClick = { selectedBackgroundColorHex = hex } // Set state to this hex string
+                            hexColor = hex,
+                            isSelected = selectedBackgroundColorHex == hex && !isCustomColorSelected, // Only selected if not custom
+                            onClick = {
+                                selectedBackgroundColorHex = hex
+                                isCustomColorSelected = false // Selecting default/standard deselects custom
+                            }
                         )
                     }
-                    // Placeholder for a future color picker button
-                    // IconButton(onClick = { /* TODO: Open color picker */ }) { /* Icon */ }
+                    val customColor = remember(selectedBackgroundColorHex) {
+                        ColorUtils.parseHexColor(selectedBackgroundColorHex) ?: Color.Transparent
+                    }
+                    // Use a Box similar to ColorSelectorBox
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp) // Match size
+                            .clip(CircleShape)
+                            // Show selected custom color as background if it's the active selection
+                            .background(if (isCustomColorSelected) customColor else MaterialTheme.colorScheme.surfaceVariant) // Show color or default bg
+                            .border(
+                                BorderStroke(
+                                    width = if (isCustomColorSelected) 3.dp else 1.dp,
+                                    color = if (isCustomColorSelected) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.5f)
+                                ),
+                                CircleShape
+                            )
+                            .clickable { showColorPickerDialog = true }, // Open picker on click
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Base ColorLens Icon
+                        Icon(
+                            Icons.Filled.ColorLens,
+                            contentDescription = "Select Custom Color",
+                            // Tint depends on whether custom color is selected
+                            tint = if (isCustomColorSelected) ColorUtils.getContrastingTextColor(customColor) else MaterialTheme.colorScheme.onSurface
+                        )
+                        // Overlay Check mark if custom color is selected
+                        if (isCustomColorSelected) {
+                            Icon(
+                                Icons.Filled.Check,
+                                contentDescription = "Custom Color Selected",
+                                modifier = Modifier.size(40.dp * 0.6f), // Smaller check mark
+                                // Ensure check mark contrasts with the selected background
+                                tint = ColorUtils.getContrastingTextColor(customColor)
+                            )
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
 
 
-                // --- Action Buttons (Cancel/Save) ---
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                // --- Action Buttons Row ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Delete Button
+                    if (isEditMode) {
+                        TextButton(
+                            onClick = {
+                                initialItemState?.id?.let { itemId -> onDelete(itemId) }
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) { Text("Delete") }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    // Cancel Button
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(modifier = Modifier.width(8.dp))
+                    // Save/Add Button
                     Button(
                         onClick = {
-                            // Only save if a command is selected
                             if (selectedCommandString.isNotEmpty()) {
-                                // Call the updated onSave lambda with all values
                                 onSave(
-                                    buttonText.ifBlank { selectedCommandString }, // Use command string as default text if blank
+                                    buttonText.ifBlank { selectedCommandString },
                                     selectedCommandString,
                                     selectedType,
-                                    // Pass null for size/color if the selected value is the same as the default
-                                    // This avoids saving unnecessary default values in the state
                                     selectedTextSizeSp.takeIf { it != defaultTextSizeSp },
-                                    selectedBackgroundColorHex.takeIf { it != defaultBackgroundColorHex }
+                                    // Pass hex unless it's the default AND custom wasn't specifically selected
+                                    selectedBackgroundColorHex.takeIf { it != defaultBackgroundColorHex || isCustomColorSelected }
                                 )
-                            } else {
-                                // Trigger validation feedback if command not selected
-                                isCommandSelected = false
-                                println("Save attempted without selecting a command.")
-                            }
+                            } else { isCommandSelected = false }
                         },
-                        // Disable Save button if no command is selected
                         enabled = selectedCommandString.isNotEmpty()
-                    ) {
-                        Text(if (isEditMode) "Save" else "Add")
-                    }
-                }
+                    ) { Text(if (isEditMode) "Save" else "Add") }
+                } // End Action Buttons Row
+            } // End Main Column
+        } // End Surface
+    } // End Main Dialog
+
+    // --- Custom Color Picker Dialog ---
+    if (showColorPickerDialog) {
+        CustomColorPickerDialog(
+            initialColor = remember(selectedBackgroundColorHex) {
+                ColorUtils.parseHexColor(selectedBackgroundColorHex) ?: Color.White
+            },
+            onDismissRequest = { showColorPickerDialog = false },
+            onColorSelected = { selectedColor ->
+                val newHex = selectedColor.toHexString()
+                selectedBackgroundColorHex = newHex
+                // Mark that the selection came from the custom picker
+                isCustomColorSelected = true
+                showColorPickerDialog = false
             }
-        }
+        )
     }
 }
 
-/**
- * A helper composable to display a single color selection circle.
- *
- * @param color The Compose Color to display.
- * @param hexColor The hex string representation of the color (used for onClick).
- * @param isSelected Whether this color is the currently selected one.
- * @param onClick Lambda function called with the hexColor string when the box is clicked.
- * @param modifier Modifier for the Box.
- * @param size The size of the color circle.
- * @param selectedBorderColor The color of the border when this item is selected.
- */
+// --- Helper Composable for Color Selection Box (Unchanged) ---
 @Composable
 private fun ColorSelectorBox(
     color: Color,
     hexColor: String,
     isSelected: Boolean,
-    onClick: (String) -> Unit,
+    onClick: () -> Unit, // Changed param type
     modifier: Modifier = Modifier,
-    size: androidx.compose.ui.unit.Dp = 40.dp, // Size of the color circle
-    selectedBorderColor: Color = MaterialTheme.colorScheme.primary // Border color when selected
+    size: androidx.compose.ui.unit.Dp = 40.dp,
+    selectedBorderColor: Color = MaterialTheme.colorScheme.primary
 ) {
     Box(
         modifier = modifier
-            .size(size) // Apply size
-            .clip(CircleShape) // Make it circular
-            .background(color) // Set the background to the passed color
-            .border( // Add a border, thicker if selected
+            .size(size)
+            .clip(CircleShape)
+            .background(color)
+            .border(
                 BorderStroke(
-                    width = if (isSelected) 2.dp else 1.dp, // Thicker border if selected
-                    color = if (isSelected) selectedBorderColor else Color.Gray.copy(alpha = 0.5f) // Use primary or gray
+                    width = if (isSelected) 3.dp else 1.dp,
+                    color = if (isSelected) selectedBorderColor else Color.Gray.copy(alpha = 0.5f)
                 ),
-                CircleShape // Apply border to the circle shape
+                CircleShape
             )
-            .clickable { onClick(hexColor) }, // Call onClick with the hex string
-        contentAlignment = Alignment.Center // Center the checkmark icon
+            .clickable { onClick() }, // Call lambda directly
+        contentAlignment = Alignment.Center
     ) {
-        // Show a checkmark icon if this color is selected
         if (isSelected) {
             Icon(
                 imageVector = Icons.Filled.Check,
-                contentDescription = "Selected Color", // Accessibility description
-                // Use contrasting color for the checkmark to ensure visibility
+                contentDescription = "Selected Color",
                 tint = ColorUtils.getContrastingTextColor(color),
-                modifier = Modifier.size(size * 0.6f) // Make icon slightly smaller than the box
+                modifier = Modifier.size(size * 0.6f)
             )
         }
     }

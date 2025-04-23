@@ -1,7 +1,9 @@
 /*
  * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/ui/layout/FreeFormLayout.kt
- * Optimized drag performance using graphicsLayer more directly with gesture state.
- * Full code using grid cell units for item position and size.
+ * Optimized drag performance using graphicsLayer for position.
+ * Resize uses state update for visual feedback.
+ * Matched resize handle style to edit button style.
+ * Using default Material 3 ripple indication.
  */
 package com.ongxeno.android.starbuttonbox.ui.layout
 
@@ -10,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -97,7 +100,7 @@ fun FreeFormLayout(
     var showAddEditDialog by remember { mutableStateOf(false) }
     var editingItemState by remember { mutableStateOf<FreeFormItemState?>(null) }
 
-    // State for temporary resize visual feedback (keep for now)
+    // State for temporary resize visual feedback
     var resizeDelta by remember { mutableStateOf(Offset.Zero) }
     // ID of the item currently being interacted with (drag or resize)
     var interactingItemId by remember { mutableStateOf<String?>(null) }
@@ -195,8 +198,8 @@ fun FreeFormLayout(
                         val enabledContainerColor = ColorUtils.parseHexColor(itemState.backgroundColorHex)
                             ?: defaultM3ButtonColors.containerColor
                         val enabledContentColor = ColorUtils.getContrastingTextColor(enabledContainerColor)
-                        val disabledContainer = enabledContainerColor.adjustLuminance(0.7f)
-                        val disabledContent = enabledContentColor.adjustLuminance(0.7f)
+                        val disabledContainer = enabledContainerColor
+                        val disabledContent = enabledContentColor
                         ButtonColors(
                             containerColor = enabledContainerColor,
                             contentColor = enabledContentColor,
@@ -216,7 +219,6 @@ fun FreeFormLayout(
                             .size(itemWidthDp, itemHeightDp)
                             // Apply visual drag translation using graphicsLayer
                             .graphicsLayer {
-                                // Only apply translation if this is the item being dragged
                                 if (itemState.id == interactingItemId) {
                                     translationX = currentDragOffset.x
                                     translationY = currentDragOffset.y
@@ -231,20 +233,16 @@ fun FreeFormLayout(
                                     detectDragGestures(
                                         onDragStart = {
                                             interactingItemId = itemState.id
-                                            currentDragOffset = Offset.Zero // Reset cumulative offset for this gesture
+                                            currentDragOffset = Offset.Zero
                                         },
                                         onDragEnd = { // Snap Position Logic
                                             val currentState = mutableItems[index]
-                                            // Calculate final top-left corner based on BASE position and ACCUMULATED drag amount
                                             val finalDraggedX = (currentState.gridCol * cellWidthPx) + currentDragOffset.x
                                             val finalDraggedY = (currentState.gridRow * cellHeightPx) + currentDragOffset.y
-
                                             val targetCol = (finalDraggedX / cellWidthPx).roundToInt()
                                             val targetRow = (finalDraggedY / cellHeightPx).roundToInt()
-
                                             val clampedCol = targetCol.coerceIn(0, GRID_COLUMNS - currentState.gridWidth)
                                             val clampedRow = targetRow.coerceIn(0, GRID_ROWS - currentState.gridHeight)
-
                                             if (currentState.gridCol != clampedCol || currentState.gridRow != clampedRow) {
                                                 mutableItems[index] = currentState.copy(
                                                     gridCol = clampedCol,
@@ -252,7 +250,6 @@ fun FreeFormLayout(
                                                 )
                                                 saveCurrentLayout(mutableItems.toList())
                                             }
-                                            // Reset interaction state
                                             currentDragOffset = Offset.Zero
                                             interactingItemId = null
                                         },
@@ -262,14 +259,13 @@ fun FreeFormLayout(
                                         },
                                         onDrag = { change, dragAmount ->
                                             change.consume()
-                                            // Update the cumulative drag offset state
                                             currentDragOffset += dragAmount
                                         }
                                     )
                                 }
                             }
                     ) {
-                        // --- Item Content Box (No longer needs drag gesture or graphicsLayer) ---
+                        // --- Item Content Box ---
                         Box(
                             modifier = Modifier.fillMaxSize()
                         ) {
@@ -288,13 +284,18 @@ fun FreeFormLayout(
                                 }
                             }
 
-                            // --- Resize Handle (Styled like Edit Button) ---
+                            // --- Resize Handle ---
                             if (!isLocked) {
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
-                                        .offset(x = (minTouchTargetSize / 2), y = (minTouchTargetSize / 2)) // Centered offset
+                                        .offset(x = (minTouchTargetSize / 2), y = (minTouchTargetSize / 2))
                                         .size(minTouchTargetSize)
+                                        .clip(CircleShape)
+                                        .clickable(
+                                            onClick = {},
+                                            enabled = !isLocked
+                                        )
                                         .pointerInput(Unit, isGridValid, itemState.id) { // Resize Gesture
                                             if (isGridValid) {
                                                 detectDragGestures(
@@ -339,14 +340,14 @@ fun FreeFormLayout(
                                             .align(Alignment.Center)
                                             .size(handleVisualSize)
                                             .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
-                                            .border(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha=0.5f), CircleShape)
+                                            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f))
+                                            .border(1.dp, MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha=0.5f), CircleShape)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Filled.OpenInFull,
                                             contentDescription = "Resize Button",
                                             modifier = Modifier.size(handleVisualSize * handleIconSizeMultiplier),
-                                            tint = MaterialTheme.colorScheme.onPrimary
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     }
                                 }
@@ -360,10 +361,13 @@ fun FreeFormLayout(
                                     .align(Alignment.TopStart)
                                     .offset(x = (-minTouchTargetSize / 2), y = (-minTouchTargetSize / 2))
                                     .size(minTouchTargetSize)
-                                    .clickable {
-                                        editingItemState = itemState
-                                        showAddEditDialog = true
-                                    }
+                                    .clip(CircleShape)
+                                    .clickable(
+                                        onClick = {
+                                            editingItemState = itemState
+                                            showAddEditDialog = true
+                                        }
+                                    )
                             ) {
                                 Box(
                                     contentAlignment = Alignment.Center,
@@ -456,6 +460,14 @@ fun FreeFormLayout(
                 saveCurrentLayout(mutableItems.toList())
             }
             showAddEditDialog = false
+        },
+        onDelete = { itemId ->
+            val indexToRemove = mutableItems.indexOfFirst { it.id == itemId }
+            if (indexToRemove != -1) {
+                mutableItems.removeAt(indexToRemove)
+                saveCurrentLayout(mutableItems.toList())
+            }
+            showAddEditDialog = false // Dismiss dialog after delete
         }
     )
 }
