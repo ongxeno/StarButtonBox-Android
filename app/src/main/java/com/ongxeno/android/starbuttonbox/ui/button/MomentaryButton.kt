@@ -1,9 +1,14 @@
+/*
+ * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/ui/button/MomentaryButton.kt
+ * Restored the second constructor overload for internal state management,
+ * uses ButtonColors, and includes textSize parameter.
+ */
 package com.ongxeno.android.starbuttonbox.ui.button
 
 import android.os.Build
 import android.os.VibrationEffect
 import androidx.annotation.RawRes
-import androidx.compose.animation.core.animateFloatAsState // Import animateFloatAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -11,81 +16,73 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-// import androidx.compose.foundation.layout.fillMaxSize // No longer needed for inner box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer // Import graphicsLayer
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned // Import onGloballyPositioned
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp // Import Dp
-import androidx.compose.ui.unit.IntSize // Import IntSize
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.*
 import com.ongxeno.android.starbuttonbox.R
 import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer
 import com.ongxeno.android.starbuttonbox.utils.LocalVibrator
-import kotlin.math.max // Import max
+import kotlin.math.max
+import kotlin.math.min
 
-// Define the amount the button should appear to shrink (total reduction)
-private val pressShrinkDp = 8.dp
-private const val minScaleFactor = 0.5f // Prevent scaling down too much
+// Define the amount the button should appear to shrink (total reduction in Dp)
+private val pressShrinkDp = 4.dp
+private const val minScaleFactor = 0.8f // Minimum scale factor
 
 /**
- * A button that triggers actions, sounds, and vibration while pressed and on release.
- * This overload manages its own pressed state internally for convenience.
- * Press effect is a dynamic scale based on fixed dp reduction.
+ * MomentaryButton overload that manages its own pressed state internally.
  *
- * Uses LocalVibrator and LocalSoundPlayer.
- *
- * @param modifier Modifier for layout customization (applied to the outer touch area).
+ * @param modifier Modifier for layout customization.
  * @param text Text displayed on the button.
  * @param enabled Controls if the button is interactive.
+ * @param onPress Lambda executed when the button is physically pressed down.
+ * @param onRelease Lambda executed when the button is physically released or interaction cancelled.
  * @param shape Shape of the button's background/clip area.
- * @param colors ButtonColors defining container and content colors for different states.
- * @param contentPadding Base padding applied *inside* the button's visual area, around the text.
+ * @param colors ButtonColors defining container and content colors for enabled/disabled states.
+ * @param textSize Custom text size for the button label.
+ * @param contentPadding Base padding applied *inside* the button's visual area.
  * @param pressSoundResId Raw resource ID for the sound to play on press.
  * @param releaseSoundResId Raw resource ID for the sound to play on release.
- * @param onPress Lambda executed when the button is physically pressed down (if enabled).
- * @param onRelease Lambda executed when the button is physically released or interaction cancelled (if enabled).
- * @param vibrateOnPress Enable vibration on press (if enabled).
- * @param vibrationDurationMs Duration of the vibration in milliseconds.
- * @param vibrationAmplitude Intensity of the vibration (1-255, requires API 26+). Use -1 for default amplitude.
+ * @param vibrateOnPress Enable vibration on press.
+ * @param vibrationDurationMs Duration of the vibration.
+ * @param vibrationAmplitude Intensity of the vibration (1-255, API 26+). -1 for default.
  */
 @Composable
 fun MomentaryButton(
     modifier: Modifier = Modifier,
     text: String,
     enabled: Boolean = true,
-    shape: Shape = RectangleShape,
-    colors: ButtonColors = ButtonDefaults.buttonColors(),
-    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp), // Default padding
-    @RawRes pressSoundResId: Int = R.raw.snes_press,
-    @RawRes releaseSoundResId: Int = R.raw.snes_release,
     onPress: () -> Unit = {},
     onRelease: () -> Unit = {},
+    shape: Shape = RectangleShape,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    textSize: TextUnit = TextUnit.Unspecified, // Added textSize
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    @RawRes pressSoundResId: Int = R.raw.snes_press,
+    @RawRes releaseSoundResId: Int = R.raw.snes_release,
     vibrateOnPress: Boolean = true,
     vibrationDurationMs: Long = 40,
     vibrationAmplitude: Int = -1
 ) {
     var isPressed by remember { mutableStateOf(false) }
 
-    // Call the internal implementation, passing the state and callbacks
+    // Call the base implementation, passing the internal state and setter
     MomentaryButton(
         modifier = modifier,
         text = text,
@@ -94,6 +91,7 @@ fun MomentaryButton(
         enabled = enabled,
         shape = shape,
         colors = colors,
+        textSize = textSize, // Pass textSize
         contentPadding = contentPadding,
         pressSoundResId = pressSoundResId,
         releaseSoundResId = releaseSoundResId,
@@ -105,112 +103,101 @@ fun MomentaryButton(
     )
 }
 
+
 /**
- * Base implementation of MomentaryButton with dynamic scale shrink effect.
- * This overload requires the caller to provide and manage the `isPressed` state
- * via the `isPressed` parameter and `onIsPressedChange` callback.
+ * Base implementation of MomentaryButton with external state management.
  *
  * @param modifier Modifier for layout customization.
  * @param text Text displayed on the button.
  * @param enabled Controls if the button is interactive.
  * @param isPressed Whether the button is currently in the pressed state (controlled externally).
- * @param onIsPressedChange Callback invoked when the button's pressed state should change due to user interaction.
+ * @param onIsPressedChange Callback invoked when the button's pressed state should change.
+ * @param onPress Lambda executed when the button is physically pressed down.
+ * @param onRelease Lambda executed when the button is physically released or interaction cancelled.
  * @param shape Shape of the button's background/clip area.
- * @param colors ButtonColors defining container and content colors for different states.
- * @param contentPadding Base padding applied *inside* the button's visual area, around the text.
+ * @param colors ButtonColors defining container and content colors for enabled/disabled states.
+ * @param textSize Custom text size for the button label.
+ * @param contentPadding Base padding applied *inside* the button's visual area.
  * @param pressSoundResId Raw resource ID for the sound to play on press.
  * @param releaseSoundResId Raw resource ID for the sound to play on release.
- * @param onPress Lambda executed when the button is physically pressed down (if enabled).
- * @param onRelease Lambda executed when the button is physically released or interaction cancelled (if enabled).
- * @param vibrateOnPress Enable vibration on press (if enabled).
- * @param vibrationDurationMs Duration of the vibration in milliseconds.
- * @param vibrationAmplitude Intensity of the vibration (1-255, requires API 26+). Use -1 for default amplitude.
+ * @param vibrateOnPress Enable vibration on press.
+ * @param vibrationDurationMs Duration of the vibration.
+ * @param vibrationAmplitude Intensity of the vibration (1-255, API 26+). -1 for default.
  */
 @Composable
-fun MomentaryButton( // Removed 'private' keyword
+fun MomentaryButton(
     modifier: Modifier = Modifier,
     text: String,
     enabled: Boolean = true,
-    isPressed: Boolean = false, // State provided by caller
+    isPressed: Boolean, // State provided by caller
     onIsPressedChange: (Boolean) -> Unit, // Callback provided by caller
-    shape: Shape = RectangleShape,
-    colors: ButtonColors = ButtonDefaults.buttonColors(),
-    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp), // Default padding
-    @RawRes pressSoundResId: Int = R.raw.snes_press,
-    @RawRes releaseSoundResId: Int = R.raw.snes_release,
     onPress: () -> Unit = {},
     onRelease: () -> Unit = {},
+    shape: Shape = RectangleShape,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    textSize: TextUnit = TextUnit.Unspecified, // Added textSize parameter
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    @RawRes pressSoundResId: Int = R.raw.snes_press,
+    @RawRes releaseSoundResId: Int = R.raw.snes_release,
     vibrateOnPress: Boolean = true,
     vibrationDurationMs: Long = 40,
     vibrationAmplitude: Int = -1
 ) {
+    // isPressed state is now managed externally via parameters
+
     val soundPlayer = LocalSoundPlayer.current
+    val vibrator = LocalVibrator.current
+
     LaunchedEffect(soundPlayer, pressSoundResId, releaseSoundResId, enabled) {
-        if (enabled) {
-            soundPlayer?.loadSound(pressSoundResId)
-            soundPlayer?.loadSound(releaseSoundResId)
+        if (enabled && soundPlayer != null) {
+            soundPlayer.loadSound(pressSoundResId)
+            soundPlayer.loadSound(releaseSoundResId)
         }
     }
 
-    // State to hold the measured size of the button in pixels
     var measuredSize by remember { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
 
-    // Calculate the target scale factor based on measured size
     val targetScale = remember(measuredSize, pressShrinkDp) {
         if (measuredSize == IntSize.Zero) {
-            1.0f // Default scale if size is not measured yet
+            1.0f
         } else {
             val widthPx = measuredSize.width.toFloat()
             val heightPx = measuredSize.height.toFloat()
             val reductionPx = with(density) { pressShrinkDp.toPx() }
-
-            val largerDimensionPx = max(widthPx, heightPx)
-
-            if (largerDimensionPx <= reductionPx) {
-                minScaleFactor // Avoid scaling up or to zero/negative if reduction is too large
+            val smallerDimensionPx = min(widthPx, heightPx)
+            if (smallerDimensionPx <= reductionPx) {
+                minScaleFactor
             } else {
-                // Calculate scale: (size - reduction) / size
-                ((largerDimensionPx - reductionPx) / largerDimensionPx)
-                    .coerceIn(minScaleFactor, 1.0f) // Ensure scale is within bounds
+                ((smallerDimensionPx - reductionPx) / smallerDimensionPx)
+                    .coerceIn(minScaleFactor, 1.0f)
             }
         }
     }
 
-    // Animate the scale factor
     val animatedScale by animateFloatAsState(
-        targetValue = if (isPressed) targetScale else 1.0f,
-        animationSpec = if (isPressed) snap() else tween(durationMillis = 100),
-        label = "ButtonDynamicScale"
+        targetValue = if (isPressed && enabled) targetScale else 1.0f,
+        animationSpec = if (isPressed && enabled) snap() else tween(durationMillis = 100),
+        label = "ButtonScaleAnimation"
     )
 
-    // Determine current colors based on state
-    val currentBackgroundColor = when {
-        !enabled -> colors.disabledContainerColor
-        isPressed -> colors.containerColor.copy(alpha = 0.8f)
-        else -> colors.containerColor
-    }
-    val currentContentColor = when {
-        !enabled -> colors.disabledContentColor
-        isPressed -> colors.contentColor.copy(alpha = 0.8f)
-        else -> colors.contentColor
-    }
+    val currentContainerColor = if (enabled) colors.containerColor else colors.disabledContainerColor
+    val currentContentColor = if (enabled) colors.contentColor else colors.disabledContentColor
 
-    val vibrator = LocalVibrator.current
     val onVibrate = {
         if (vibrateOnPress && enabled && vibrator?.hasVibrator() == true) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val clampedAmplitude = when (vibrationAmplitude) {
-                    -1 -> VibrationEffect.DEFAULT_AMPLITUDE
+                    -1 -> VibrationEffect.EFFECT_TICK
                     else -> vibrationAmplitude.coerceIn(1, 255)
                 }
                 try {
                     val effect = VibrationEffect.createOneShot(vibrationDurationMs, clampedAmplitude)
                     vibrator.vibrate(effect)
                 } catch (e: IllegalArgumentException) {
-                    println("Vibration failed: ${e.message}")
+                    println("Vibration failed (API 29+): ${e.message}")
                     @Suppress("DEPRECATION")
-                    vibrator.vibrate(vibrationDurationMs) // Fallback
+                    vibrator.vibrate(vibrationDurationMs)
                 }
             } else {
                 @Suppress("DEPRECATION")
@@ -219,20 +206,19 @@ fun MomentaryButton( // Removed 'private' keyword
         }
     }
 
-    // Box handles size, touch input, scaling, clipping, and background
     Box(
         contentAlignment = Alignment.Center,
-        modifier = modifier // Apply external modifiers (like size from FreeFormLayout) here
+        modifier = modifier
+            .fillMaxSize()
             .onGloballyPositioned { layoutCoordinates ->
-                // Update measured size when layout changes
                 measuredSize = layoutCoordinates.size
             }
-            .graphicsLayer { // Apply scaling
+            .graphicsLayer {
                 scaleX = animatedScale
                 scaleY = animatedScale
             }
             .clip(shape)
-            .background(currentBackgroundColor)
+            .background(currentContainerColor)
             .pointerInput(enabled) { // Pointer input detects press/release
                 if (!enabled) return@pointerInput
                 awaitPointerEventScope {
@@ -250,15 +236,15 @@ fun MomentaryButton( // Removed 'private' keyword
                     }
                 }
             }
-            .padding(contentPadding) // Apply base content padding *inside* the background/clip
+            .padding(contentPadding)
     ) {
         Text(
             text = text,
             color = currentContentColor,
             textAlign = TextAlign.Center,
-            fontSize = 12.sp,
-            lineHeight = 14.sp,
-            style = MaterialTheme.typography.labelLarge,
+            fontSize = if (textSize != TextUnit.Unspecified) textSize else 14.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

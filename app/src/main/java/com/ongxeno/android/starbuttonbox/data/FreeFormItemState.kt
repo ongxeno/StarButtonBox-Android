@@ -1,32 +1,34 @@
+/*
+ * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/data/FreeFormItemState.kt
+ * Modified to store position and size in grid cell units.
+ */
 @file:OptIn(InternalSerializationApi::class)
 
 package com.ongxeno.android.starbuttonbox.data
 
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-// Enum to define the type of component in the layout
 @Serializable
 enum class FreeFormItemType {
     MOMENTARY_BUTTON
 }
 
 /**
- * Represents the state of a single item (e.g., a button) within a FreeFormLayout.
- * Designed to be serializable for persistence.
+ * Represents the state of a single item within a FreeFormLayout.
+ * Stores position and size in terms of grid cells.
  *
- * @param id Unique identifier for this item instance.
- * @param type The type of UI component this item represents.
- * @param text The text label displayed (primarily for buttons).
- * @param commandString The unique identifier string of the Command associated with this item.
- * @param offsetX The horizontal position (offset from left).
- * @param offsetY The vertical position (offset from top).
- * @param widthDp The width of the item in Dp.
- * @param heightDp The height of the item in Dp.
+ * @param id Unique identifier.
+ * @param type The type of UI component.
+ * @param text The text label.
+ * @param commandString The command identifier.
+ * @param gridCol The starting column index (0-based) of the item.
+ * @param gridRow The starting row index (0-based) of the item.
+ * @param gridWidth The width of the item in number of grid columns (minimum 1).
+ * @param gridHeight The height of the item in number of grid rows (minimum 1).
+ * @param textSizeSp Optional custom text size (sp).
+ * @param backgroundColorHex Optional custom background color hex.
  */
 @Serializable
 data class FreeFormItemState(
@@ -34,20 +36,18 @@ data class FreeFormItemState(
     val type: FreeFormItemType = FreeFormItemType.MOMENTARY_BUTTON,
     val text: String = "",
     val commandString: String,
-    val offsetX: Float = 0f,
-    val offsetY: Float = 0f,
-    val widthDp: Float = 120f,
-    val heightDp: Float = 50f
+    // --- Grid-Based Position and Size ---
+    val gridCol: Int = 1,       // Default starting column
+    val gridRow: Int = 1,       // Default starting row
+    val gridWidth: Int = 4,     // Default width in columns
+    val gridHeight: Int = 2,    // Default height in rows
+    // --- Customization ---
+    val textSizeSp: Float? = null,
+    val backgroundColorHex: String? = null
 ) {
-    @kotlinx.serialization.Transient
-    val offset: Offset
-        get() = Offset(offsetX, offsetY)
-
-    @kotlinx.serialization.Transient
-    val width: Dp
-        get() = Dp(widthDp)
-
-    @kotlinx.serialization.Transient
-    val height: Dp
-        get() = Dp(heightDp)
+    // Ensure dimensions are at least 1
+    init {
+        require(gridWidth >= 1) { "gridWidth must be at least 1" }
+        require(gridHeight >= 1) { "gridHeight must be at least 1" }
+    }
 }

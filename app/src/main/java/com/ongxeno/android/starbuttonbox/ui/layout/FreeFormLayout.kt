@@ -1,53 +1,45 @@
+/*
+ * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/ui/layout/FreeFormLayout.kt
+ * Optimized drag performance using graphicsLayer more directly with gesture state.
+ * Full code using grid cell units for item position and size.
+ */
 package com.ongxeno.android.starbuttonbox.ui.layout
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.filled.OpenInFull // Icon for resize handle
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer // Import graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.*
 import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemType
 import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditButtonDialog
+import com.ongxeno.android.starbuttonbox.utils.ColorUtils
+// Import the extension function
+import com.ongxeno.android.starbuttonbox.utils.ColorUtils.adjustLuminance
 import com.ongxeno.android.starbuttonbox.utils.LocalLayoutDatasource
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -56,37 +48,37 @@ import kotlin.math.roundToInt
 // --- Grid Configuration ---
 private const val GRID_COLUMNS = 60
 private const val GRID_ROWS = 35
-private val gridLineColor = Color.Gray.copy(alpha = 0.4f)
+private val gridLineColor = Color.Gray.copy(alpha = 0.2f)
 private val gridStrokeWidth = 1.dp
-private val gridPathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+private val gridPathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 8f), 0f)
 
-// --- Button Size Constraints ---
-private val minButtonWidth = 30.dp
-private val minButtonHeight = 20.dp
-private val maxButtonWidth = 600.dp
-private val maxButtonHeight = 400.dp
-private val resizeHandleSize = 16.dp
-private val editButtonVisualSize = 24.dp // Desired VISUAL size (e.g., 16.dp)
-private val editButtonIconSizeMultiplier = 0.5f // Icon size relative to VISUAL size
-private val minTouchTargetSize = 48.dp // Minimum touch target size (Material Design guideline) // *** ADDED DEFINITION ***
+// --- Button Size Constraints (Now in Grid Units) ---
+private const val minGridWidth = 2
+private const val minGridHeight = 1
+private const val maxGridWidth = GRID_COLUMNS
+private const val maxGridHeight = GRID_ROWS
 
-// --- Define Default Layouts Here ---
+// --- Edit/Resize Handle Appearance ---
+private val handleVisualSize = 24.dp
+private val handleIconSizeMultiplier = 0.5f
+private val minTouchTargetSize = 48.dp
+
+// --- Default Layouts Definition (Using Grid Units) ---
 private fun getDefaultItemsForLayout(layoutId: String): List<FreeFormItemState> {
-    // Create default states using the commandString directly
     return when (layoutId) {
         "freeform_1" -> listOf(
-            FreeFormItemState(text = "FLT RDY", commandString = Command.GeneralCockpit_FlightReady),
-            FreeFormItemState(text = "GEAR", commandString = Command.LandingAndDocking_ToggleLandingGear),
-            FreeFormItemState(text = "ENGINES", commandString = Command.PowerManagement_TogglePowerEngines),
-            FreeFormItemState(text = "QT MODE", commandString = Command.QuantumTravel_ToggleQuantumMode)
+            FreeFormItemState(text = "FLT RDY", commandString = Command.GeneralCockpit_FlightReady, gridCol = 1, gridRow = 1, gridWidth = 8, gridHeight = 4),
+            FreeFormItemState(text = "GEAR", commandString = Command.LandingAndDocking_ToggleLandingGear, gridCol = 10, gridRow = 1, gridWidth = 8, gridHeight = 4),
+            FreeFormItemState(text = "ENGINES", commandString = Command.PowerManagement_TogglePowerEngines, gridCol = 1, gridRow = 6, gridWidth = 8, gridHeight = 4),
+            FreeFormItemState(text = "QT MODE", commandString = Command.QuantumTravel_ToggleQuantumMode, gridCol = 10, gridRow = 6, gridWidth = 10, gridHeight = 4)
         )
         "freeform_2" -> listOf(
-            FreeFormItemState(text = "SCAN", commandString = Command.Scanning_ToggleScanningMode),
-            FreeFormItemState(text = "PING", commandString = Command.Scanning_ActivatePing),
-            FreeFormItemState(text = "LOCK TGT", commandString = Command.Targeting_LockSelectedTarget),
-            FreeFormItemState(text = "UNLOCK", commandString = Command.Targeting_UnlockLockedTarget)
+            FreeFormItemState(text = "SCAN", commandString = Command.Scanning_ToggleScanningMode, gridCol = 45, gridRow = 30, gridWidth = 12, gridHeight = 4),
+            FreeFormItemState(text = "PING", commandString = Command.Scanning_ActivatePing, gridCol = 45, gridRow = 25, gridWidth = 12, gridHeight = 4),
+            FreeFormItemState(text = "LOCK TGT", commandString = Command.Targeting_LockSelectedTarget, gridCol = 1, gridRow = 30, gridWidth = 15, gridHeight = 4),
+            FreeFormItemState(text = "UNLOCK", commandString = Command.Targeting_UnlockLockedTarget, gridCol = 18, gridRow = 30, gridWidth = 12, gridHeight = 4)
         )
-        else -> emptyList() // Default for unknown IDs
+        else -> emptyList()
     }
 }
 
@@ -102,19 +94,33 @@ fun FreeFormLayout(
     var isLoading by remember(layoutId) { mutableStateOf(true) }
     val mutableItems = remember { mutableStateListOf<FreeFormItemState>() }
 
-    // State for the Add/Edit Dialog
     var showAddEditDialog by remember { mutableStateOf(false) }
     var editingItemState by remember { mutableStateOf<FreeFormItemState?>(null) }
 
+    // State for temporary resize visual feedback (keep for now)
+    var resizeDelta by remember { mutableStateOf(Offset.Zero) }
+    // ID of the item currently being interacted with (drag or resize)
+    var interactingItemId by remember { mutableStateOf<String?>(null) }
+    // State to hold the *cumulative* drag offset during a gesture for the specific interacting item
+    var currentDragOffset by remember { mutableStateOf(Offset.Zero) }
+
+
+    // --- Load Layout Data ---
     LaunchedEffect(layoutId, layoutDatasource) {
         isLoading = true
         layoutDatasource.getLayoutFlow(layoutId).collect { loadedItems ->
             val itemsToUse = if (loadedItems.isEmpty()) {
-                println("Layout '$layoutId' not found in DataStore, loading default.")
                 getDefaultItemsForLayout(layoutId)
             } else {
-                println("Layout '$layoutId' loaded from DataStore.")
-                loadedItems
+                // Validate loaded grid values
+                loadedItems.map {
+                    it.copy(
+                        gridWidth = it.gridWidth.coerceAtLeast(1),
+                        gridHeight = it.gridHeight.coerceAtLeast(1),
+                        gridCol = it.gridCol.coerceAtLeast(0),
+                        gridRow = it.gridRow.coerceAtLeast(0)
+                    )
+                }
             }
             mutableItems.clear()
             mutableItems.addAll(itemsToUse)
@@ -122,29 +128,34 @@ fun FreeFormLayout(
         }
     }
 
+    // --- Save Layout Data ---
     val scope = rememberCoroutineScope()
     val saveCurrentLayout: (List<FreeFormItemState>) -> Unit = { itemsToSave ->
         scope.launch {
-            layoutDatasource.saveLayout(layoutId, itemsToSave)
+            layoutDatasource.saveLayout(layoutId, itemsToSave.toList())
         }
     }
 
-    // --- Main Layout ---
+    // --- Main Layout UI ---
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val constraints = this.constraints
         val maxWidthPx = constraints.maxWidth.toFloat()
         val maxHeightPx = constraints.maxHeight.toFloat()
-        val cellWidthPx = if (GRID_COLUMNS > 0) maxWidthPx / GRID_COLUMNS else maxWidthPx
-        val cellHeightPx = if (GRID_ROWS > 0) maxHeightPx / GRID_ROWS else maxHeightPx
+        // Calculate cell dimensions
+        val cellWidthPx = if (GRID_COLUMNS > 0 && maxWidthPx > 0) maxWidthPx / GRID_COLUMNS else maxWidthPx
+        val cellHeightPx = if (GRID_ROWS > 0 && maxHeightPx > 0) maxHeightPx / GRID_ROWS else maxHeightPx
         val gridStrokeWidthPx = with(density) { gridStrokeWidth.toPx() }
+
+        // Check if grid is valid
+        val isGridValid = cellWidthPx > 0 && cellHeightPx > 0
 
         Box(modifier = Modifier.fillMaxSize()) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
                 // --- Draw Grid Lines ---
-                if (!isLocked && GRID_COLUMNS > 0 && GRID_ROWS > 0) {
+                if (!isLocked && isGridValid) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         for (i in 1 until GRID_COLUMNS) {
                             val x = i * cellWidthPx
@@ -157,154 +168,231 @@ fun FreeFormLayout(
                     }
                 }
 
-                // --- Render Items ---
+                // --- Render Layout Items ---
                 mutableItems.forEachIndexed { index, itemState ->
                     val commandIdentifier = itemState.commandString
-                    val itemWidth = remember(itemState.widthDp) { Dp(itemState.widthDp) }
-                    val itemHeight = remember(itemState.heightDp) { Dp(itemState.heightDp) }
-                    val itemOffsetX = itemState.offsetX
-                    val itemOffsetY = itemState.offsetY
 
-                    Box( // Container for item + edit button
+                    // Calculate BASE Absolute Position and Size
+                    val itemBaseAbsoluteX = itemState.gridCol * cellWidthPx
+                    val itemBaseAbsoluteY = itemState.gridRow * cellHeightPx
+                    val itemBaseAbsoluteWidth = itemState.gridWidth * cellWidthPx
+                    val itemBaseAbsoluteHeight = itemState.gridHeight * cellHeightPx
+
+                    // Apply temporary resize delta for visual feedback
+                    val currentResizeDeltaW = if (itemState.id == interactingItemId) resizeDelta.x else 0f
+                    val currentResizeDeltaH = if (itemState.id == interactingItemId) resizeDelta.y else 0f
+
+                    val finalRenderWidthPx = itemBaseAbsoluteWidth + currentResizeDeltaW
+                    val finalRenderHeightPx = itemBaseAbsoluteHeight + currentResizeDeltaH
+
+                    val itemWidthDp = with(density) { finalRenderWidthPx.toDp() }
+                    val itemHeightDp = with(density) { finalRenderHeightPx.toDp() }
+
+
+                    // Resolve Styling
+                    val defaultM3ButtonColors = ButtonDefaults.buttonColors()
+                    val buttonColors = remember(itemState.backgroundColorHex) {
+                        val enabledContainerColor = ColorUtils.parseHexColor(itemState.backgroundColorHex)
+                            ?: defaultM3ButtonColors.containerColor
+                        val enabledContentColor = ColorUtils.getContrastingTextColor(enabledContainerColor)
+                        val disabledContainer = enabledContainerColor.adjustLuminance(0.7f)
+                        val disabledContent = enabledContentColor.adjustLuminance(0.7f)
+                        ButtonColors(
+                            containerColor = enabledContainerColor,
+                            contentColor = enabledContentColor,
+                            disabledContainerColor = disabledContainer,
+                            disabledContentColor = disabledContent
+                        )
+                    }
+                    val textSize = remember(itemState.textSizeSp) {
+                        itemState.textSizeSp?.sp ?: TextUnit.Unspecified
+                    }
+
+                    // --- Item Container Box ---
+                    // Positioned at the BASE absolute position
+                    Box(
                         modifier = Modifier
-                            .offset { IntOffset(itemOffsetX.roundToInt(), itemOffsetY.roundToInt()) }
-                            .size(itemWidth, itemHeight)
-                    ) {
-                        // --- Item Content Box (handles drag, resize, rendering) ---
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(isLocked, cellWidthPx, cellHeightPx, itemState.id) {
-                                    if (!isLocked) {
-                                        detectDragGestures(
-                                            onDragEnd = {
-                                                // Snap Position Logic (unchanged)
-                                                val currentState = mutableItems[index]
-                                                val currentLocalWidthPx = with(density) { Dp(currentState.widthDp).toPx() }
-                                                val currentLocalHeightPx = with(density) { Dp(currentState.heightDp).toPx() }
-                                                val targetCol = if (cellWidthPx > 0) (currentState.offsetX / cellWidthPx).roundToInt() else 0
-                                                val targetRow = if (cellHeightPx > 0) (currentState.offsetY / cellHeightPx).roundToInt() else 0
-                                                val coercedCol = targetCol.coerceIn(0, GRID_COLUMNS - 1)
-                                                val coercedRow = targetRow.coerceIn(0, GRID_ROWS - 1)
-                                                val snappedX = coercedCol * cellWidthPx
-                                                val snappedY = coercedRow * cellHeightPx
-                                                val finalX = snappedX.coerceIn(0f, maxWidthPx - currentLocalWidthPx)
-                                                val finalY = snappedY.coerceIn(0f, maxHeightPx - currentLocalHeightPx)
-                                                mutableItems[index] = currentState.copy(offsetX = finalX, offsetY = finalY)
+                            .offset { IntOffset(itemBaseAbsoluteX.roundToInt(), itemBaseAbsoluteY.roundToInt()) }
+                            .size(itemWidthDp, itemHeightDp)
+                            // Apply visual drag translation using graphicsLayer
+                            .graphicsLayer {
+                                // Only apply translation if this is the item being dragged
+                                if (itemState.id == interactingItemId) {
+                                    translationX = currentDragOffset.x
+                                    translationY = currentDragOffset.y
+                                } else {
+                                    translationX = 0f
+                                    translationY = 0f
+                                }
+                            }
+                            // Drag gesture detection moved here
+                            .pointerInput(isLocked, isGridValid, itemState.id) {
+                                if (!isLocked && isGridValid) {
+                                    detectDragGestures(
+                                        onDragStart = {
+                                            interactingItemId = itemState.id
+                                            currentDragOffset = Offset.Zero // Reset cumulative offset for this gesture
+                                        },
+                                        onDragEnd = { // Snap Position Logic
+                                            val currentState = mutableItems[index]
+                                            // Calculate final top-left corner based on BASE position and ACCUMULATED drag amount
+                                            val finalDraggedX = (currentState.gridCol * cellWidthPx) + currentDragOffset.x
+                                            val finalDraggedY = (currentState.gridRow * cellHeightPx) + currentDragOffset.y
+
+                                            val targetCol = (finalDraggedX / cellWidthPx).roundToInt()
+                                            val targetRow = (finalDraggedY / cellHeightPx).roundToInt()
+
+                                            val clampedCol = targetCol.coerceIn(0, GRID_COLUMNS - currentState.gridWidth)
+                                            val clampedRow = targetRow.coerceIn(0, GRID_ROWS - currentState.gridHeight)
+
+                                            if (currentState.gridCol != clampedCol || currentState.gridRow != clampedRow) {
+                                                mutableItems[index] = currentState.copy(
+                                                    gridCol = clampedCol,
+                                                    gridRow = clampedRow
+                                                )
                                                 saveCurrentLayout(mutableItems.toList())
                                             }
-                                        ) { change, dragAmount ->
+                                            // Reset interaction state
+                                            currentDragOffset = Offset.Zero
+                                            interactingItemId = null
+                                        },
+                                        onDragCancel = {
+                                            currentDragOffset = Offset.Zero
+                                            interactingItemId = null
+                                        },
+                                        onDrag = { change, dragAmount ->
                                             change.consume()
-                                            // Update offset during drag (unchanged)
-                                            val currentState = mutableItems[index]
-                                            val currentLocalWidthPx = with(density) { Dp(currentState.widthDp).toPx() }
-                                            val currentLocalHeightPx = with(density) { Dp(currentState.heightDp).toPx() }
-                                            val newOffset = Offset(currentState.offsetX, currentState.offsetY) + dragAmount
-                                            val coercedX = newOffset.x.coerceIn(0f, maxWidthPx - currentLocalWidthPx)
-                                            val coercedY = newOffset.y.coerceIn(0f, maxHeightPx - currentLocalHeightPx)
-                                            mutableItems[index] = currentState.copy(offsetX = coercedX, offsetY = coercedY)
+                                            // Update the cumulative drag offset state
+                                            currentDragOffset += dragAmount
                                         }
-                                    }
+                                    )
                                 }
+                            }
+                    ) {
+                        // --- Item Content Box (No longer needs drag gesture or graphicsLayer) ---
+                        Box(
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            // --- Render the actual component based on type ---
+                            // --- Render the actual component ---
                             when (itemState.type) {
                                 FreeFormItemType.MOMENTARY_BUTTON -> {
                                     MomentaryButton(
                                         modifier = Modifier.fillMaxSize(),
                                         text = itemState.text,
                                         enabled = isLocked,
-                                        onPress = { if (isLocked) onCommand(commandIdentifier) }
+                                        onPress = { if (isLocked) onCommand(commandIdentifier) },
+                                        colors = buttonColors,
+                                        textSize = textSize,
+                                        shape = RoundedCornerShape(8.dp)
                                     )
                                 }
                             }
 
-                            // --- Resize Handle ---
+                            // --- Resize Handle (Styled like Edit Button) ---
                             if (!isLocked) {
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
-                                        .offset(x = resizeHandleSize / 2, y = resizeHandleSize / 2)
-                                        .size(resizeHandleSize)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary)
-                                        .pointerInput(Unit, cellWidthPx, cellHeightPx, itemState.id) {
-                                            detectDragGestures(
-                                                onDragEnd = {
-                                                    // Snap Size Logic (unchanged)
-                                                    val currentState = mutableItems[index]
-                                                    val currentLocalWidthPx = with(density) { Dp(currentState.widthDp).toPx() }
-                                                    val currentLocalHeightPx = with(density) { Dp(currentState.heightDp).toPx() }
-                                                    val targetWidthCells = max(1, if (cellWidthPx > 0) (currentLocalWidthPx / cellWidthPx).roundToInt() else 1)
-                                                    val targetHeightCells = max(1, if (cellHeightPx > 0) (currentLocalHeightPx / cellHeightPx).roundToInt() else 1)
-                                                    val snappedWidthPx = targetWidthCells * cellWidthPx
-                                                    val snappedHeightPx = targetHeightCells * cellHeightPx
-                                                    val snappedWidthDp = with(density) { snappedWidthPx.toDp() }.coerceIn(minButtonWidth, maxButtonWidth)
-                                                    val snappedHeightDp = with(density) { snappedHeightPx.toDp() }.coerceIn(minButtonHeight, maxButtonHeight)
-                                                    mutableItems[index] = currentState.copy(widthDp = snappedWidthDp.value, heightDp = snappedHeightDp.value)
-                                                    saveCurrentLayout(mutableItems.toList())
-                                                }
-                                            ) { change, dragAmount ->
-                                                change.consume()
-                                                // Update size during drag (unchanged)
-                                                val currentState = mutableItems[index]
-                                                val currentLocalWidthPx = with(density) { Dp(currentState.widthDp).toPx() }
-                                                val currentLocalHeightPx = with(density) { Dp(currentState.heightDp).toPx() }
-                                                val newWidthPx = currentLocalWidthPx + dragAmount.x
-                                                val newHeightPx = currentLocalHeightPx + dragAmount.y
-                                                val newWidthDp = with(density) { newWidthPx.toDp() }.coerceIn(minButtonWidth, maxButtonWidth)
-                                                val newHeightDp = with(density) { newHeightPx.toDp() }.coerceIn(minButtonHeight, maxButtonHeight)
-                                                mutableItems[index] = currentState.copy(widthDp = newWidthDp.value, heightDp = newHeightDp.value)
+                                        .offset(x = (minTouchTargetSize / 2), y = (minTouchTargetSize / 2)) // Centered offset
+                                        .size(minTouchTargetSize)
+                                        .pointerInput(Unit, isGridValid, itemState.id) { // Resize Gesture
+                                            if (isGridValid) {
+                                                detectDragGestures(
+                                                    onDragStart = {
+                                                        interactingItemId = itemState.id
+                                                        resizeDelta = Offset.Zero
+                                                    },
+                                                    onDragEnd = { // Snap Size Logic
+                                                        val currentState = mutableItems[index]
+                                                        val finalDraggedWidthPx = (currentState.gridWidth * cellWidthPx) + resizeDelta.x
+                                                        val finalDraggedHeightPx = (currentState.gridHeight * cellHeightPx) + resizeDelta.y
+                                                        val targetWidthCells = max(minGridWidth, (finalDraggedWidthPx / cellWidthPx).roundToInt())
+                                                        val targetHeightCells = max(minGridHeight, (finalDraggedHeightPx / cellHeightPx).roundToInt())
+                                                        val clampedWidthCells = targetWidthCells.coerceIn(minGridWidth, GRID_COLUMNS - currentState.gridCol)
+                                                        val clampedHeightCells = targetHeightCells.coerceIn(minGridHeight, GRID_ROWS - currentState.gridRow)
+                                                        if (currentState.gridWidth != clampedWidthCells || currentState.gridHeight != clampedHeightCells) {
+                                                            mutableItems[index] = currentState.copy(
+                                                                gridWidth = clampedWidthCells,
+                                                                gridHeight = clampedHeightCells
+                                                            )
+                                                            saveCurrentLayout(mutableItems.toList())
+                                                        }
+                                                        resizeDelta = Offset.Zero
+                                                        interactingItemId = null
+                                                    },
+                                                    onDragCancel = {
+                                                        resizeDelta = Offset.Zero
+                                                        interactingItemId = null
+                                                    },
+                                                    onDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        resizeDelta += dragAmount
+                                                    }
+                                                )
                                             }
                                         }
-                                )
+                                ) {
+                                    // Inner Box provides the visual appearance
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .size(handleVisualSize)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
+                                            .border(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha=0.5f), CircleShape)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.OpenInFull,
+                                            contentDescription = "Resize Button",
+                                            modifier = Modifier.size(handleVisualSize * handleIconSizeMultiplier),
+                                            tint = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    }
+                                }
                             }
                         } // End Item Content Box
 
-                        // --- Edit Button (Top Left Corner - Option 3) ---
+                        // --- Edit Button ---
                         if (!isLocked) {
-                            // IconButton provides the larger touch target and handles clicks
-                            IconButton(
-                                onClick = {
-                                    editingItemState = itemState
-                                    showAddEditDialog = true
-                                },
+                            Box(
                                 modifier = Modifier
                                     .align(Alignment.TopStart)
-                                    .offset(x = (-minTouchTargetSize / 2), y = (-minTouchTargetSize / 2)) // Offset based on visual size
-                                    // Ensure IconButton has minimum touch target size (or default)
-                                    .sizeIn(minWidth = minTouchTargetSize, minHeight = minTouchTargetSize), // Use the defined constant
-                                // Make IconButton background transparent
-                                colors = IconButtonDefaults.iconButtonColors(containerColor = Color.Transparent)
+                                    .offset(x = (-minTouchTargetSize / 2), y = (-minTouchTargetSize / 2))
+                                    .size(minTouchTargetSize)
+                                    .clickable {
+                                        editingItemState = itemState
+                                        showAddEditDialog = true
+                                    }
                             ) {
-                                // Inner Box provides the small visual appearance
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
-                                        .size(editButtonVisualSize) // Set the desired visual size
+                                        .align(Alignment.Center)
+                                        .size(handleVisualSize)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f))
+                                        .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f))
                                         .border(1.dp, MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha=0.5f), CircleShape)
                                 ) {
                                     Icon(
                                         Icons.Filled.Edit,
-                                        contentDescription = "Edit Button", // Content description on IconButton is better for accessibility
-                                        modifier = Modifier.size(editButtonVisualSize * editButtonIconSizeMultiplier), // Size icon relative to visual size
+                                        contentDescription = "Edit Button",
+                                        modifier = Modifier.size(handleVisualSize * handleIconSizeMultiplier),
                                         tint = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
                                 }
                             }
                         } // End Edit Button
-                    } // End Container Box
+                    } // End Item Container Box
                 } // End forEachIndexed
-            } // End else (isLoading)
 
-            // --- Top Right Control Buttons (Lock/Unlock and Add) ---
+            } // End else (isLoading check)
+
+            // --- Top Right Control Buttons ---
             Row(
                 modifier = Modifier.align(Alignment.TopEnd).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Add Button
                 if (!isLocked) {
                     IconButton(
                         onClick = {
@@ -315,27 +403,31 @@ fun FreeFormLayout(
                             .padding(end = 8.dp)
                             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f), MaterialTheme.shapes.medium)
                     ) {
-                        Icon(Icons.Filled.Add, "Add Button", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Icon(Icons.Filled.Add, "Add New Button", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
-                // Lock/Unlock Button
                 IconButton(
                     onClick = { isLocked = !isLocked },
                     modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f), MaterialTheme.shapes.medium),
                     colors = IconButtonDefaults.iconButtonColors(contentColor = if (isLocked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen, contentDescription = if (isLocked) "Layout Locked" else "Layout Unlocked")
+                    Icon(
+                        imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                        contentDescription = if (isLocked) "Layout Locked (Tap to Edit)" else "Layout Unlocked (Tap to Lock)"
+                    )
                 }
             } // End Top Right Controls Row
-        } // End Main Content Box
+
+        } // End Main Content Box (inside BoxWithConstraints)
     } // End BoxWithConstraints
 
-    // --- Add/Edit Dialog ---
+    // --- Add/Edit Dialog Instance ---
     AddEditButtonDialog(
         showDialog = showAddEditDialog,
         onDismiss = { showAddEditDialog = false },
         initialItemState = editingItemState,
-        onSave = { text, commandString, type ->
+        // Saving only updates non-positional/size properties
+        onSave = { text, commandString, type, textSizeSp, backgroundColorHex ->
             val currentEditId = editingItemState?.id
             if (currentEditId != null) {
                 // Edit Mode
@@ -344,19 +436,21 @@ fun FreeFormLayout(
                     mutableItems[indexToUpdate] = mutableItems[indexToUpdate].copy(
                         text = text,
                         commandString = commandString,
-                        type = type
+                        type = type,
+                        textSizeSp = textSizeSp,
+                        backgroundColorHex = backgroundColorHex
                     )
                     saveCurrentLayout(mutableItems.toList())
-                } else {
-                    println("Error: Could not find item with ID $currentEditId to update.")
-                }
+                } else { /* Error */ }
             } else {
-                // Add Mode
+                // Add Mode - Create new item with default grid values
                 val newItem = FreeFormItemState(
                     text = text,
                     commandString = commandString,
                     type = type,
-                    offsetX = 0f, offsetY = 0f, widthDp = 120f, heightDp = 50f
+                    textSizeSp = textSizeSp,
+                    backgroundColorHex = backgroundColorHex
+                    // Default gridCol/Row/Width/Height are set in data class constructor
                 )
                 mutableItems.add(newItem)
                 saveCurrentLayout(mutableItems.toList())
@@ -366,7 +460,7 @@ fun FreeFormLayout(
     )
 }
 
-// Example Usage (Unchanged)
+// Example Usage
 @Composable
 fun ExampleFreeFormLayoutUsage(
     layoutId: String,
