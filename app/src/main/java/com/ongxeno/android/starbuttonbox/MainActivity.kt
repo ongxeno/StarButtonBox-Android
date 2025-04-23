@@ -1,3 +1,7 @@
+/*
+ * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/MainActivity.kt
+ * Updated to use let and Elvis operator for safe handling of nullable selectedTabIndex state.
+ */
 package com.ongxeno.android.starbuttonbox
 
 import android.os.Bundle
@@ -10,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,12 +24,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,11 +55,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-// Removed Command import
+import androidx.lifecycle.compose.collectAsStateWithLifecycle // Import collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.datasource.ConfigDatasource
 import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource
-import com.ongxeno.android.starbuttonbox.datasource.TabDatasource
+import com.ongxeno.android.starbuttonbox.datasource.TabDatasource // Import TabDatasource class
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.setting.SettingsDialog
@@ -123,6 +129,7 @@ private fun HideSystemBarsEffect() {
                 windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
             }
         }
+        // Initial hide
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
@@ -135,9 +142,11 @@ private fun HideSystemBarsEffect() {
 
 @Composable
 fun StarCitizenButtonBoxApp() {
-    val context = LocalContext.current
+    val context = LocalContext.current.applicationContext // Use application context
     val scope = rememberCoroutineScope()
-    val configDatasource = remember { ConfigDatasource(context.applicationContext) }
+    val configDatasource = remember { ConfigDatasource(context) }
+    // Instantiate the new TabDatasource class
+    val tabDatasource = remember { TabDatasource(context) }
     val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(initialValue = null)
     var showSettingsDialog by remember { mutableStateOf(false) }
 
@@ -155,10 +164,9 @@ fun StarCitizenButtonBoxApp() {
         }
     }
 
-    // Command handler lambda now accepts a String identifier
+    // Command handler lambda
     val handleCommand = { commandIdentifier: String ->
         if (udpSender != null) {
-            // Pass the identifier string directly to UdpSender
             udpSender.sendCommandAction(commandIdentifier)
         } else {
             Handler(Looper.getMainLooper()).post {
@@ -169,9 +177,11 @@ fun StarCitizenButtonBoxApp() {
         Unit
     }
 
-    // Tab Definitions and State (TabDatasource now uses the String lambda)
-    val tabItems = remember { TabDatasource.getTabs() }
-    var selectedTabIndex by remember { mutableStateOf(0) }
+    // Tab Definitions (now from the instance)
+    val tabItems = remember { tabDatasource.getTabs() }
+    // Observe the selected tab index from TabDatasource flow
+    // Collect with null initial value to detect loading state
+    val selectedTabIndex: Int? by tabDatasource.selectedTabIndexFlow.collectAsStateWithLifecycle(initialValue = null)
 
     // --- Main UI Structure ---
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -190,10 +200,20 @@ fun StarCitizenButtonBoxApp() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 tabItems.forEachIndexed { index, tabInfo ->
-                    IconButton(onClick = { selectedTabIndex = index }, modifier = Modifier.size(48.dp)) {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                tabDatasource.saveSelectedTabIndex(index)
+                            }
+                        },
+                        modifier = Modifier.size(48.dp),
+                        // Disable button if index is still loading
+                        enabled = selectedTabIndex != null
+                    ) {
                         Icon(
                             imageVector = tabInfo.icon,
                             contentDescription = tabInfo.title,
+                            // Tint depends on whether the loaded index matches this button's index
                             tint = if (selectedTabIndex == index) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
                         )
                     }
@@ -211,12 +231,29 @@ fun StarCitizenButtonBoxApp() {
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
         ) {
-            if (selectedTabIndex >= 0 && selectedTabIndex < tabItems.size) {
-                val selectedTab = tabItems[selectedTabIndex]
-                // Pass the updated handleCommand lambda (String) -> Unit
-                selectedTab.content(handleCommand)
-            } else {
-                PlaceholderLayout("Error: Invalid Tab Index")
+            // Use let for the non-null case (index loaded)
+            // Use ?: for the null case (index loading)
+            selectedTabIndex?.let { indexValue ->
+                // Index is loaded and non-null
+                if (indexValue >= 0 && indexValue < tabItems.size) {
+                    val selectedTab = tabItems[indexValue]
+                    selectedTab.content(handleCommand)
+                } else {
+                    // Handle invalid index
+                    if (tabItems.isNotEmpty()) {
+                        LaunchedEffect(Unit) {
+                            tabDatasource.saveSelectedTabIndex(0)
+                        }
+                        tabItems[0].content(handleCommand)
+                    } else {
+                        PlaceholderLayout("No Tabs Available")
+                    }
+                }
+            } ?: run {
+                // Index is null (still loading from DataStore)
+                Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
         }
     }
