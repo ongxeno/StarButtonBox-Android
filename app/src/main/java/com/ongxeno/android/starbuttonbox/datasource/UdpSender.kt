@@ -6,6 +6,7 @@ import com.ongxeno.android.starbuttonbox.data.InputAction
 import com.ongxeno.android.starbuttonbox.data.mapCommandIdentifierToAction // Import the mapper function
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel // Import cancel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -16,20 +17,23 @@ import java.net.InetAddress
 /**
  * Handles serializing InputActions (obtained by mapping command identifier strings)
  * and sending them as JSON strings via UDP packets.
+ * Creates a new socket for each send operation.
  *
  * @param targetIpAddress The IP address of the receiving PC server.
  * @param targetPort The port number the receiving PC server is listening on.
- * @param scope The CoroutineScope to launch network operations on (defaults to IO dispatcher).
  */
 class UdpSender(
     private val targetIpAddress: String,
-    private val targetPort: Int,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO) // Use IO dispatcher for network
+    private val targetPort: Int
 ) {
 
     companion object {
         private const val TAG = "UdpSender" // Tag for logging
     }
+
+    // Create a dedicated scope for this sender's operations
+    // Using Dispatchers.IO for network operations
+    private val senderScope = CoroutineScope(Dispatchers.IO)
 
     // Initialize Json instance internally
     private val json = Json {
@@ -44,17 +48,13 @@ class UdpSender(
      *
      * @param commandIdentifier The unique string identifying the command (e.g., "Flight.Boost").
      */
-    // Changed signature to accept String
     fun sendCommandAction(commandIdentifier: String) {
-        // Use the mapping function from KeyMapper.kt (or wherever you placed it)
         val inputAction: InputAction? = mapCommandIdentifierToAction(commandIdentifier)
 
         if (inputAction != null) {
-            // Pass the identifier string for logging
             sendActionInternal(inputAction, commandIdentifier)
         } else {
             Log.w(TAG, "No InputAction mapped for command identifier: $commandIdentifier. Nothing sent.")
-            // Optional: Implement callback/state to notify UI about unmapped command
         }
     }
 
@@ -65,40 +65,37 @@ class UdpSender(
      * @param originalCommandIdentifier The string identifier of the original command for logging.
      */
     private fun sendActionInternal(inputAction: InputAction, originalCommandIdentifier: String) {
-        scope.launch { // Launch network operation in the background
+        // Launch network operation in the sender's scope
+        senderScope.launch {
             var socket: DatagramSocket? = null
             val jsonString = try {
                 json.encodeToString(inputAction)
             } catch (e: Exception) {
-                Log.e(
-                    TAG,
-                    "Error serializing action for command '$originalCommandIdentifier': $inputAction",
-                    e
-                )
+                Log.e(TAG, "Error serializing action for command '$originalCommandIdentifier': $inputAction", e)
                 return@launch // Stop if serialization fails
             }
 
             try {
                 // Prepare and Send UDP Packet
-                socket = DatagramSocket() // Create socket for sending
+                socket = DatagramSocket() // Create socket for sending THIS packet
                 val address: InetAddress = InetAddress.getByName(targetIpAddress)
                 val data: ByteArray = jsonString.toByteArray(Charsets.UTF_8)
                 val packet = DatagramPacket(data, data.size, address, targetPort)
 
                 socket.send(packet)
 
-                // Log using the command identifier string
-                Log.d(
-                    TAG,
-                    "Sent JSON for '$originalCommandIdentifier': $jsonString to $targetIpAddress:$targetPort"
-                )
-                // Optional: Implement a callback or state flow here to notify UI of success
+                Log.d(TAG, "Sent JSON for '$originalCommandIdentifier': $jsonString to $targetIpAddress:$targetPort")
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending UDP packet for command '$originalCommandIdentifier'", e)
-                // Optional: Implement a callback or state flow here to notify UI of failure
             } finally {
-                socket?.close() // Ensure the socket is always closed
+                // Ensure the socket created for THIS send operation is closed
+                try {
+                    socket?.close()
+                    Log.d(TAG, "Socket closed for command '$originalCommandIdentifier'.")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error closing socket for command '$originalCommandIdentifier'.", e)
+                }
             }
         }
     }
@@ -108,10 +105,10 @@ class UdpSender(
      * Useful for testing or specific scenarios.
      */
     fun sendJsonString(jsonString: String) {
-        scope.launch {
+        senderScope.launch {
             var socket: DatagramSocket? = null
             try {
-                socket = DatagramSocket()
+                socket = DatagramSocket() // Create socket for sending THIS packet
                 val address: InetAddress = InetAddress.getByName(targetIpAddress)
                 val data: ByteArray = jsonString.toByteArray(Charsets.UTF_8)
                 val packet = DatagramPacket(data, data.size, address, targetPort)
@@ -120,8 +117,30 @@ class UdpSender(
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending raw JSON string", e)
             } finally {
-                socket?.close()
+                // Ensure the socket created for THIS send operation is closed
+                try {
+                    socket?.close()
+                    Log.d(TAG, "Socket closed for raw JSON string send.")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error closing socket for raw JSON string send.", e)
+                }
             }
         }
+    }
+
+    /**
+     * Cleans up resources used by the UdpSender.
+     * In this implementation, it cancels any ongoing coroutines launched by the senderScope.
+     * Sockets are closed individually after each send operation.
+     */
+    fun close() {
+        Log.d(TAG, "Closing UdpSender. Cancelling senderScope.")
+        // Cancel the scope to stop any ongoing or pending send operations
+        try {
+            senderScope.cancel() // Cancels all coroutines launched in this scope
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cancelling senderScope", e)
+        }
+        // No persistent socket to close here, as they are closed in finally blocks.
     }
 }

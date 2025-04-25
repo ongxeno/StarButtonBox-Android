@@ -1,6 +1,7 @@
 package com.ongxeno.android.starbuttonbox.datasource
 
 import android.content.Context
+import android.util.Log // Added Log import
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.builtins.ListSerializer
+import java.io.IOException // Added IOException import
 
 // Define the DataStore instance at the top level
 private val Context.layoutDataStore: DataStore<Preferences> by preferencesDataStore(name = "freeform_layouts")
@@ -25,6 +27,10 @@ private val Context.layoutDataStore: DataStore<Preferences> by preferencesDataSt
  */
 class LayoutDatasource(private val context: Context) {
 
+    companion object {
+        private const val TAG = "LayoutDatasource" // Tag for logging
+    }
+
     // Configure Kotlinx JSON serialization
     private val json = Json {
         ignoreUnknownKeys = true
@@ -34,13 +40,13 @@ class LayoutDatasource(private val context: Context) {
 
     // Function to create a Preferences key for a given layout ID
     private fun layoutPreferenceKey(layoutId: String): Preferences.Key<String> {
-        return stringPreferencesKey("layout_$layoutId")
+        return stringPreferencesKey("layout_$layoutId") // Use imported function
     }
 
     /**
      * Provides a Flow of the layout state (list of items) for a specific layout ID.
      * Emits the list whenever it changes in DataStore.
-     * Returns an empty list if no data is found for the ID.
+     * Returns an empty list if no data is found for the ID or on deserialization error.
      */
     fun getLayoutFlow(layoutId: String): Flow<List<FreeFormItemState>> {
         val key = layoutPreferenceKey(layoutId)
@@ -54,13 +60,24 @@ class LayoutDatasource(private val context: Context) {
                         // Deserialize the JSON string back into a list of states
                         json.decodeFromString(ListSerializer(FreeFormItemState.serializer()), jsonString)
                     } catch (e: Exception) {
-                        println("Error deserializing layout $layoutId: ${e.message}")
+                        Log.e(TAG, "Error deserializing layout $layoutId: ${e.message}", e)
                         emptyList() // Return empty list on error
                     }
                 }
             }
             .distinctUntilChanged() // Only emit when the list content actually changes
     }
+
+    /**
+     * Gets default items for a given layout ID.
+     * TODO: Implement actual default item logic if needed.
+     */
+    fun getDefaultItemsForLayout(layoutId: String): List<FreeFormItemState> {
+        Log.d(TAG, "Providing empty default items for layoutId: $layoutId")
+        // Replace with actual default item creation logic based on layoutId if necessary
+        return emptyList()
+    }
+
 
     /**
      * Saves the current state (list of items) for a specific layout ID to DataStore.
@@ -70,24 +87,26 @@ class LayoutDatasource(private val context: Context) {
         try {
             // Serialize the list of states into a JSON string
             val jsonString = json.encodeToString(ListSerializer(FreeFormItemState.serializer()), items)
-            context.layoutDataStore.edit { preferences ->
+            context.layoutDataStore.edit { preferences -> // Use imported function
                 preferences[key] = jsonString
             }
-            println("Saved layout $layoutId state.")
+            Log.d(TAG,"Saved layout $layoutId state.")
         } catch (e: Exception) {
-            println("Error serializing layout $layoutId: ${e.message}")
+            Log.e(TAG,"Error serializing/saving layout $layoutId: ${e.message}", e)
             // Handle error appropriately (e.g., log, show message)
         }
     }
 
     /**
      * Retrieves the current layout state once. Useful for initial loading if needed,
-     * though using the Flow is generally preferred. Returns empty list if not found.
+     * though using the Flow is generally preferred. Returns empty list if not found or on error.
      */
     suspend fun getLayoutOnce(layoutId: String): List<FreeFormItemState> {
-        return getLayoutFlow(layoutId).first() // Get the first emission from the flow
+        return try {
+            getLayoutFlow(layoutId).first() // Get the first emission from the flow
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting layout once for $layoutId", e)
+            emptyList()
+        }
     }
-
-    // --- Companion Object Removed ---
-    // companion object { ... }
 }

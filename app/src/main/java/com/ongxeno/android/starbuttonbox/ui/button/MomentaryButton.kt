@@ -1,12 +1,10 @@
 /*
  * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/ui/button/MomentaryButton.kt
- * Restored the second constructor overload for internal state management,
- * uses ButtonColors, and includes textSize parameter.
+ * Updated to inject and use FeedbackViewModel directly via hiltViewModel().
+ * Removed onPlaySound and onVibrate callbacks.
  */
 package com.ongxeno.android.starbuttonbox.ui.button
 
-import android.os.Build
-import android.os.VibrationEffect
 import androidx.annotation.RawRes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,10 +32,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
-import com.ongxeno.android.starbuttonbox.R
-import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer
-import com.ongxeno.android.starbuttonbox.utils.LocalVibrator
-import kotlin.math.max
+import androidx.hilt.navigation.compose.hiltViewModel // Import hiltViewModel
+import com.ongxeno.android.starbuttonbox.R // Keep R for default sound IDs
+import com.ongxeno.android.starbuttonbox.ui.FeedbackViewModel // Import FeedbackViewModel
 import kotlin.math.min
 
 // Define the amount the button should appear to shrink (total reduction in Dp)
@@ -47,6 +43,7 @@ private const val minScaleFactor = 0.8f // Minimum scale factor
 
 /**
  * MomentaryButton overload that manages its own pressed state internally.
+ * Uses FeedbackViewModel for sound and vibration.
  *
  * @param modifier Modifier for layout customization.
  * @param text Text displayed on the button.
@@ -62,6 +59,7 @@ private const val minScaleFactor = 0.8f // Minimum scale factor
  * @param vibrateOnPress Enable vibration on press.
  * @param vibrationDurationMs Duration of the vibration.
  * @param vibrationAmplitude Intensity of the vibration (1-255, API 26+). -1 for default.
+ * @param feedbackViewModel Injected instance of FeedbackViewModel.
  */
 @Composable
 fun MomentaryButton(
@@ -70,15 +68,17 @@ fun MomentaryButton(
     enabled: Boolean = true,
     onPress: () -> Unit = {},
     onRelease: () -> Unit = {},
+    // Removed onPlaySound, onVibrate parameters
     shape: Shape = RectangleShape,
     colors: ButtonColors = ButtonDefaults.buttonColors(),
-    textSize: TextUnit = TextUnit.Unspecified, // Added textSize
+    textSize: TextUnit = TextUnit.Unspecified,
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-    @RawRes pressSoundResId: Int = R.raw.snes_press,
-    @RawRes releaseSoundResId: Int = R.raw.snes_release,
+    @RawRes pressSoundResId: Int = R.raw.snes_press, // Default sound
+    @RawRes releaseSoundResId: Int = R.raw.snes_release, // Default sound
     vibrateOnPress: Boolean = true,
-    vibrationDurationMs: Long = 40,
-    vibrationAmplitude: Int = -1
+    vibrationDurationMs: Long = 40, // Default duration
+    vibrationAmplitude: Int = -1, // Default amplitude
+    feedbackViewModel: FeedbackViewModel = hiltViewModel() // Inject FeedbackViewModel
 ) {
     var isPressed by remember { mutableStateOf(false) }
 
@@ -91,12 +91,13 @@ fun MomentaryButton(
         enabled = enabled,
         shape = shape,
         colors = colors,
-        textSize = textSize, // Pass textSize
+        textSize = textSize,
         contentPadding = contentPadding,
         pressSoundResId = pressSoundResId,
         releaseSoundResId = releaseSoundResId,
         onPress = onPress,
         onRelease = onRelease,
+        feedbackViewModel = feedbackViewModel, // Pass ViewModel instance
         vibrateOnPress = vibrateOnPress,
         vibrationDurationMs = vibrationDurationMs,
         vibrationAmplitude = vibrationAmplitude
@@ -106,6 +107,8 @@ fun MomentaryButton(
 
 /**
  * Base implementation of MomentaryButton with external state management.
+ * Renamed to MomentaryButtonBase to avoid conflict.
+ * Uses FeedbackViewModel for sound and vibration.
  *
  * @param modifier Modifier for layout customization.
  * @param text Text displayed on the button.
@@ -114,6 +117,7 @@ fun MomentaryButton(
  * @param onIsPressedChange Callback invoked when the button's pressed state should change.
  * @param onPress Lambda executed when the button is physically pressed down.
  * @param onRelease Lambda executed when the button is physically released or interaction cancelled.
+ * @param feedbackViewModel Injected instance of FeedbackViewModel.
  * @param shape Shape of the button's background/clip area.
  * @param colors ButtonColors defining container and content colors for enabled/disabled states.
  * @param textSize Custom text size for the button label.
@@ -133,9 +137,11 @@ fun MomentaryButton(
     onIsPressedChange: (Boolean) -> Unit, // Callback provided by caller
     onPress: () -> Unit = {},
     onRelease: () -> Unit = {},
+    feedbackViewModel: FeedbackViewModel, // Receive FeedbackViewModel instance
+    // Removed onPlaySound, onVibrate parameters
     shape: Shape = RectangleShape,
     colors: ButtonColors = ButtonDefaults.buttonColors(),
-    textSize: TextUnit = TextUnit.Unspecified, // Added textSize parameter
+    textSize: TextUnit = TextUnit.Unspecified,
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
     @RawRes pressSoundResId: Int = R.raw.snes_press,
     @RawRes releaseSoundResId: Int = R.raw.snes_release,
@@ -143,17 +149,6 @@ fun MomentaryButton(
     vibrationDurationMs: Long = 40,
     vibrationAmplitude: Int = -1
 ) {
-    // isPressed state is now managed externally via parameters
-
-    val soundPlayer = LocalSoundPlayer.current
-    val vibrator = LocalVibrator.current
-
-    LaunchedEffect(soundPlayer, pressSoundResId, releaseSoundResId, enabled) {
-        if (enabled && soundPlayer != null) {
-            soundPlayer.loadSound(pressSoundResId)
-            soundPlayer.loadSound(releaseSoundResId)
-        }
-    }
 
     var measuredSize by remember { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
@@ -184,28 +179,6 @@ fun MomentaryButton(
     val currentContainerColor = if (enabled) colors.containerColor else colors.disabledContainerColor
     val currentContentColor = if (enabled) colors.contentColor else colors.disabledContentColor
 
-    val onVibrate = {
-        if (vibrateOnPress && enabled && vibrator?.hasVibrator() == true) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val clampedAmplitude = when (vibrationAmplitude) {
-                    -1 -> VibrationEffect.EFFECT_TICK
-                    else -> vibrationAmplitude.coerceIn(1, 255)
-                }
-                try {
-                    val effect = VibrationEffect.createOneShot(vibrationDurationMs, clampedAmplitude)
-                    vibrator.vibrate(effect)
-                } catch (e: IllegalArgumentException) {
-                    println("Vibration failed (API 29+): ${e.message}")
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(vibrationDurationMs)
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(vibrationDurationMs)
-            }
-        }
-    }
-
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -225,14 +198,16 @@ fun MomentaryButton(
                     while (true) {
                         awaitFirstDown(requireUnconsumed = false)
                         onIsPressedChange(true) // Use callback
-                        onVibrate()
-                        onPress()
-                        soundPlayer?.playSound(pressSoundResId)
+                        if (vibrateOnPress) { // Check flag before calling
+                            feedbackViewModel.vibrate(vibrationDurationMs, vibrationAmplitude) // Call ViewModel
+                        }
+                        onPress() // Call passed onPress
+                        feedbackViewModel.playSound(pressSoundResId) // Call ViewModel
 
                         waitForUpOrCancellation()
                         onIsPressedChange(false) // Use callback
-                        onRelease()
-                        soundPlayer?.playSound(releaseSoundResId)
+                        onRelease() // Call passed onRelease
+                        feedbackViewModel.playSound(releaseSoundResId) // Call ViewModel
                     }
                 }
             }

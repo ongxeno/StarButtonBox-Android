@@ -1,17 +1,16 @@
 /*
  * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/MainActivity.kt
- * Updated to use let and Elvis operator for safe handling of nullable selectedTabIndex state.
+ * Refactored to use Hilt for dependency injection and a MainViewModel.
+ * Updated tab content call to pass ViewModel.
  */
 package com.ongxeno.android.starbuttonbox
 
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import android.widget.Toast
+import android.widget.Toast // Keep for potential direct usage if needed outside VM
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels // Import for viewModels delegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -40,10 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+// Removed unused state imports: mutableStateOf, remember, rememberCoroutineScope, setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -55,25 +51,21 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle // Import collectAsStateWithLifecycle
-import com.ongxeno.android.starbuttonbox.datasource.ConfigDatasource
-import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource
-import com.ongxeno.android.starbuttonbox.datasource.TabDatasource // Import TabDatasource class
-import com.ongxeno.android.starbuttonbox.datasource.UdpSender
-import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+// Removed datasource imports no longer needed here
+import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout // Keep for fallback
+import com.ongxeno.android.starbuttonbox.ui.model.TabInfo // Keep for type usage
 import com.ongxeno.android.starbuttonbox.ui.setting.SettingsDialog
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
-import com.ongxeno.android.starbuttonbox.utils.LocalLayoutDatasource
-import com.ongxeno.android.starbuttonbox.utils.LocalSoundPlayer
-import com.ongxeno.android.starbuttonbox.utils.LocalVibrator
-import com.ongxeno.android.starbuttonbox.utils.NestedCompositionLocalProvider
-import com.ongxeno.android.starbuttonbox.utils.getVibratorManager
-import com.ongxeno.android.starbuttonbox.utils.rememberSoundPlayer
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+// Removed CompositionLocal imports and NestedCompositionLocalProvider
+import dagger.hilt.android.AndroidEntryPoint // Import Hilt annotation
 
+@AndroidEntryPoint // Enable Hilt injection for this Activity
 class MainActivity : ComponentActivity() {
+
+    // Inject MainViewModel using the Hilt viewModels delegate
+    private val viewModel: MainViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -81,30 +73,25 @@ class MainActivity : ComponentActivity() {
         hideSystemBars()
 
         setContent {
-            HideSystemBarsEffect()
+            HideSystemBarsEffect() // Apply the effect to hide system bars consistently
 
             StarButtonBoxTheme {
-                val context = LocalContext.current.applicationContext
-                val soundPlayer = rememberSoundPlayer()
-                val vibratorManager = remember { getVibratorManager(context) }
-                val layoutDatasource = remember { LayoutDatasource(context) }
+                // No need for NestedCompositionLocalProvider anymore for datasources/utils
+                // Hilt handles dependency provision to the ViewModel.
 
-                NestedCompositionLocalProvider(
-                    LocalSoundPlayer provides soundPlayer,
-                    LocalVibrator provides vibratorManager,
-                    LocalLayoutDatasource provides layoutDatasource
+                // Main Surface of the application
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        StarCitizenButtonBoxApp()
-                    }
+                    // Pass ViewModel state and event handlers to the main App composable
+                    StarCitizenButtonBoxApp(viewModel = viewModel)
                 }
             }
         }
     }
 
+    // Utility function to initially hide system bars (remains the same)
     private fun hideSystemBars() {
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior =
@@ -113,6 +100,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * A Composable effect that observes the lifecycle and ensures system bars are hidden
+ * when the activity resumes. (Remains the same)
+ */
 @Composable
 private fun HideSystemBarsEffect() {
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -129,7 +120,6 @@ private fun HideSystemBarsEffect() {
                 windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
             }
         }
-        // Initial hide
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
@@ -140,52 +130,33 @@ private fun HideSystemBarsEffect() {
 }
 
 
+/**
+ * The main Composable function that sets up the application's UI.
+ * Now receives state and event handlers from the MainViewModel.
+ *
+ * @param viewModel The MainViewModel instance provided by Hilt.
+ */
 @Composable
-fun StarCitizenButtonBoxApp() {
-    val context = LocalContext.current.applicationContext // Use application context
-    val scope = rememberCoroutineScope()
-    val configDatasource = remember { ConfigDatasource(context) }
-    // Instantiate the new TabDatasource class
-    val tabDatasource = remember { TabDatasource(context) }
-    val targetNetworkConfig by configDatasource.networkConfigFlow.collectAsStateWithLifecycle(initialValue = null)
-    var showSettingsDialog by remember { mutableStateOf(false) }
+fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
+    // Get context for Toast messages passed to ViewModel
+    val context = LocalContext.current.applicationContext
 
-    LaunchedEffect(targetNetworkConfig) {
-        val (ip, port) = targetNetworkConfig ?: return@LaunchedEffect
-        if (!showSettingsDialog && (ip == null || port == null)) {
-            Log.d("StarCitizenButtonBoxApp", "Config missing, showing settings dialog automatically.")
-            showSettingsDialog = true
-        }
-    }
+    // Collect state from ViewModel using collectAsStateWithLifecycle
+    val targetNetworkConfig by viewModel.networkConfigState.collectAsStateWithLifecycle()
+    val selectedTabIndex by viewModel.selectedTabIndexState.collectAsStateWithLifecycle()
+    val showSettingsDialog by viewModel.showSettings // Collect simple state
 
-    val udpSender: UdpSender? = remember(targetNetworkConfig) {
-        targetNetworkConfig?.let { (ip, port) ->
-            if (ip != null && port != null) UdpSender(ip, port) else null
-        }
-    }
+    // Get tab items from ViewModel (assuming static for now)
+    val tabItems = viewModel.tabItems
 
-    // Command handler lambda
+    // Command handler now calls the ViewModel's method
     val handleCommand = { commandIdentifier: String ->
-        if (udpSender != null) {
-            udpSender.sendCommandAction(commandIdentifier)
-        } else {
-            Handler(Looper.getMainLooper()).post {
-                Toast.makeText(context, "Settings required", Toast.LENGTH_SHORT).show()
-            }
-            if (!showSettingsDialog) showSettingsDialog = true
-        }
-        Unit
+        viewModel.sendCommand(commandIdentifier, context)
     }
 
-    // Tab Definitions (now from the instance)
-    val tabItems = remember { tabDatasource.getTabs() }
-    // Observe the selected tab index from TabDatasource flow
-    // Collect with null initial value to detect loading state
-    val selectedTabIndex: Int? by tabDatasource.selectedTabIndexFlow.collectAsStateWithLifecycle(initialValue = null)
-
-    // --- Main UI Structure ---
+    // --- Main UI Structure: Column layout ---
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // Top Bar
+        // --- Top Bar: Contains tabs and settings button ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -194,63 +165,63 @@ fun StarCitizenButtonBoxApp() {
                 .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Scrollable Tabs
+            // --- Scrollable Tabs Row ---
             Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 tabItems.forEachIndexed { index, tabInfo ->
                     IconButton(
-                        onClick = {
-                            scope.launch {
-                                tabDatasource.saveSelectedTabIndex(index)
-                            }
-                        },
+                        onClick = { viewModel.selectTab(index) }, // Call ViewModel to select tab
                         modifier = Modifier.size(48.dp),
-                        // Disable button if index is still loading
-                        enabled = selectedTabIndex != null
+                        enabled = selectedTabIndex != null // Enable only when index is loaded
                     ) {
                         Icon(
                             imageVector = tabInfo.icon,
                             contentDescription = tabInfo.title,
-                            // Tint depends on whether the loaded index matches this button's index
                             tint = if (selectedTabIndex == index) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
                         )
                     }
                 }
             }
-            // Settings Button
-            IconButton(onClick = { showSettingsDialog = true }) {
+            // --- Settings Button ---
+            IconButton(onClick = { viewModel.showSettingsDialog() }) { // Call VM to show settings
                 Icon(Icons.Filled.Settings, "Settings", tint = Color.White)
             }
         }
 
-        // Tab Content Area
+        // --- Tab Content Area ---
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
         ) {
-            // Use let for the non-null case (index loaded)
-            // Use ?: for the null case (index loading)
+            // Display content based on the selected tab index from ViewModel state
             selectedTabIndex?.let { indexValue ->
-                // Index is loaded and non-null
                 if (indexValue >= 0 && indexValue < tabItems.size) {
                     val selectedTab = tabItems[indexValue]
-                    selectedTab.content(handleCommand)
+                    // Call the content lambda, passing BOTH handleCommand and viewModel
+                    selectedTab.content(viewModel)
                 } else {
-                    // Handle invalid index
+                    // Handle invalid index (e.g., if tabs changed)
                     if (tabItems.isNotEmpty()) {
+                        // Default to the first tab if index is invalid but tabs exist
                         LaunchedEffect(Unit) {
-                            tabDatasource.saveSelectedTabIndex(0)
+                            viewModel.selectTab(0) // Ensure VM state is consistent
                         }
-                        tabItems[0].content(handleCommand)
+                        // Render first tab based on potentially updated state
+                        val firstTab = tabItems[0]
+                        // Call the content lambda, passing BOTH handleCommand and viewModel
+                        firstTab.content(viewModel)
+
                     } else {
                         PlaceholderLayout("No Tabs Available")
                     }
                 }
             } ?: run {
-                // Index is null (still loading from DataStore)
+                // Case: selectedTabIndex is null (still loading)
                 Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -259,24 +230,14 @@ fun StarCitizenButtonBoxApp() {
     }
 
     // --- Settings Dialog ---
+    // Show the dialog conditionally based on the ViewModel state
     if (showSettingsDialog) {
         SettingsDialog(
-            onDismissRequest = {
-                targetNetworkConfig?.let { (ip, port) ->
-                    if (ip != null && port != null) showSettingsDialog = false
-                    else Toast.makeText(context, "Please save settings first", Toast.LENGTH_SHORT).show()
-                } ?: Toast.makeText(context, "Loading Settings...", Toast.LENGTH_SHORT).show()
-            },
-            onSave = { ip, port ->
-                scope.launch {
-                    configDatasource.saveSettings(ip, port)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Settings Saved", Toast.LENGTH_SHORT).show()
-                        showSettingsDialog = false
-                    }
-                }
-            },
-            networkConfigFlow = configDatasource.networkConfigFlow,
+            // Pass lambdas referencing ViewModel functions
+            onDismissRequest = { viewModel.hideSettingsDialog(context) },
+            onSave = { ip, port -> viewModel.saveSettings(ip, port) },
+            // Pass the network config flow directly from the ViewModel state
+            networkConfigFlow = viewModel.networkConfigState,
         )
     }
 }

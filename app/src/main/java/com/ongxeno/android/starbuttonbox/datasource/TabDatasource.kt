@@ -1,6 +1,6 @@
 /*
  * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/datasource/TabDatasource.kt
- * Modified to be a class and handle persistence of the selected tab index using DataStore.
+ * Removed item state collection from FreeFormLayout calls.
  */
 package com.ongxeno.android.starbuttonbox.datasource
 
@@ -26,7 +26,6 @@ import com.ongxeno.android.starbuttonbox.ui.model.TabInfo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-// Define the DataStore instance at the top level for Tab preferences
 private val Context.tabDataStore: DataStore<Preferences> by preferencesDataStore(name = "tab_prefs")
 
 /**
@@ -34,7 +33,6 @@ private val Context.tabDataStore: DataStore<Preferences> by preferencesDataStore
  */
 class TabDatasource(private val context: Context) {
 
-    // Define a key for storing the selected tab index
     private object PreferencesKeys {
         val SELECTED_TAB_INDEX = intPreferencesKey("selected_tab_index")
     }
@@ -45,7 +43,6 @@ class TabDatasource(private val context: Context) {
      */
     val selectedTabIndexFlow: Flow<Int> = context.tabDataStore.data
         .map { preferences ->
-            // Read the integer value associated with the key, defaulting to 0
             preferences[PreferencesKeys.SELECTED_TAB_INDEX] ?: 0
         }
 
@@ -61,61 +58,55 @@ class TabDatasource(private val context: Context) {
 
     /**
      * Returns the static list of tabs available in the application.
+     * Note: The content lambda now accepts the ViewModel.
      */
     fun getTabs(): List<TabInfo> {
-        // This list remains static for now
         return listOf(
             TabInfo(
                 order = 0,
                 title = "Normal Flight",
                 icon = Icons.Filled.Rocket,
-                content = { onCommand -> NormalFlightLayout(onCommand) }
+                content = { viewModel -> NormalFlightLayout(viewModel) }
             ),
             TabInfo(
                 order = 1,
                 title = "Free Form 1",
                 icon = Icons.Filled.DashboardCustomize,
-                content = @Composable { onCommand ->
-                    FreeFormLayout(
-                        layoutId = "freeform_1",
-                        onCommand = onCommand
-                    )
+                content = @Composable { viewModel ->
+                    FreeFormLayout(viewModel = viewModel)
                 }
             ),
             TabInfo(
                 order = 2,
                 title = "Free Form 2",
                 icon = Icons.Filled.DashboardCustomize,
-                content = @Composable { onCommand ->
-                    FreeFormLayout(
-                        layoutId = "freeform_2",
-                        onCommand = onCommand
-                    )
+                content = @Composable { viewModel ->
+                    FreeFormLayout(viewModel = viewModel)
                 }
             ),
             TabInfo(
                 order = 3,
                 title = "Salvage",
                 icon = Icons.Filled.Recycling,
-                content = { PlaceholderLayout("Salvage Layout Placeholder") }
+                content = { viewModel -> PlaceholderLayout("Salvage Layout Placeholder") }
             ),
             TabInfo(
                 order = 4,
                 title = "Mining",
                 icon = Icons.Filled.Diamond,
-                content = { PlaceholderLayout("Mining Layout Placeholder") }
+                content = { viewModel -> PlaceholderLayout("Mining Layout Placeholder") }
             ),
             TabInfo(
                 order = 5,
                 title = "Combat",
                 icon = Icons.Filled.LocalFireDepartment,
-                content = { PlaceholderLayout("Combat Layout Placeholder") }
+                content = { viewModel -> PlaceholderLayout("Combat Layout Placeholder") }
             ),
             TabInfo(
                 order = 6,
                 title = "Demo",
                 icon = Icons.Filled.Widgets,
-                content = { DemoLayout() }
+                content = { viewModel -> DemoLayout() }
             )
         ).sortedBy { it.order }
     }

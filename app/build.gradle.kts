@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -38,26 +40,54 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
 }
 
 dependencies {
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.animation)
-    implementation(libs.androidx.compose.material.iconsExtended)
+    // Use library aliases defined in your updated libs.versions.toml
+
+    // Core & Existing
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.material3)
+    implementation(libs.androidx.lifecycle.runtime.ktx) // Your original lifecycle runtime
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.kotlinx.serialization.json) // Your serialization lib
+
+    // Compose BOM and UI Components (using your BOM)
+    implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(platform(libs.androidx.compose.bom))
-    testImplementation(libs.junit)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.compose.material.iconsExtended) // Your material icons extended
+    implementation(libs.androidx.animation) // Your animation lib
+
+    // --- Added Hilt and related dependencies ---
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler) // Use ksp processor alias
+    implementation(libs.hilt.navigation.compose)
+
+    // Lifecycle & ViewModel (using the newer versions added)
+    implementation(libs.lifecycle.runtime.compose) // Compose specific runtime
+    implementation(libs.lifecycle.viewmodel.ktx)
+    implementation(libs.lifecycle.viewmodel.compose)
+
+
+    // Testing (using your existing aliases)
+    testImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(platform(libs.androidx.compose.bom)) // Test BOM
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+}
+// Allow references to generated code
+ksp {
+    arg("dagger.fastInit", "enabled")
 }

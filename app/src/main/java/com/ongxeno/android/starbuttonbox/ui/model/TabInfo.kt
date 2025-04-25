@@ -2,6 +2,7 @@ package com.ongxeno.android.starbuttonbox.ui.model
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.ongxeno.android.starbuttonbox.MainViewModel
 
 /**
  * Data class to hold information about each tab in the UI.
@@ -16,5 +17,5 @@ data class TabInfo(
     val order: Int,
     val title: String,
     val icon: ImageVector,
-    val content: @Composable (onCommand: (String) -> Unit) -> Unit
+    val content: @Composable (viewModel: MainViewModel) -> Unit
 )
