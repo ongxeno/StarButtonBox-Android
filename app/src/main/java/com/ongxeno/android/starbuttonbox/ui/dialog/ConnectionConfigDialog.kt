@@ -1,4 +1,4 @@
-package com.ongxeno.android.starbuttonbox.ui.setting
+package com.ongxeno.android.starbuttonbox.ui.dialog
 
 import android.content.Context // Import context
 import android.widget.Toast

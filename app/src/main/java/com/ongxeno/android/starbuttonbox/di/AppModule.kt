@@ -1,30 +1,61 @@
-package com.ongxeno.android.starbuttonbox.di // Create a 'di' package
+package com.ongxeno.android.starbuttonbox.di
 
 import android.content.Context
-// Removed SoundPool import
 import android.os.Build
 import android.os.Vibrator
 import android.os.VibratorManager
-import androidx.core.content.ContextCompat.getSystemService
-import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource
+import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository // Import new Repository
 import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
-import com.ongxeno.android.starbuttonbox.datasource.TabDatasource
-// Removed SoundPlayer import - Hilt finds it via @Inject constructor
-import com.ongxeno.android.starbuttonbox.utils.VibratorManagerUtils // Keep VibratorManagerUtils import
+// Removed old Datasource imports
+// import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource
+// import com.ongxeno.android.starbuttonbox.datasource.TabDatasource
+import com.ongxeno.android.starbuttonbox.utils.VibratorManagerUtils
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import javax.inject.Qualifier
 import javax.inject.Singleton
 
 /**
- * Hilt Module to provide application-wide dependencies.
- * Installed in SingletonComponent means these dependencies live as long as the application.
+ * Qualifier annotation for the application-level CoroutineScope.
+ * This helps distinguish it if other scopes were needed.
+ */
+@Retention(AnnotationRetention.BINARY)
+@Qualifier
+annotation class ApplicationScope
+
+/**
+ * Hilt Module dedicated to providing CoroutineScopes.
  */
 @Module
 @InstallIn(SingletonComponent::class)
-object AppModule {
+object CoroutineScopeModule {
+
+    /**
+     * Provides a singleton application-level CoroutineScope.
+     * Uses SupervisorJob to prevent child job failures from cancelling the scope.
+     * Uses Dispatchers.IO as a suitable default dispatcher for DataStore operations.
+     */
+    @Provides
+    @Singleton
+    @ApplicationScope // Use the qualifier
+    fun provideApplicationScope(): CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+}
+
+
+/**
+ * Main Hilt Module to provide application-wide dependencies.
+ * Includes datasources, utilities, and system services.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule { // Renamed from DatasourceModule for clarity if it was separate
 
     // Provides the application context where needed
     @Provides
@@ -40,24 +71,18 @@ object AppModule {
         return SettingDatasource(context)
     }
 
-    // Provides LayoutDatasource as a singleton
+    /**
+     * Provides the new LayoutRepository as a singleton.
+     * Depends on the application context and the application-level CoroutineScope.
+     */
     @Provides
     @Singleton
-    fun provideLayoutDatasource(@ApplicationContext context: Context): LayoutDatasource {
-        return LayoutDatasource(context)
+    fun provideLayoutRepository(
+        @ApplicationContext context: Context,
+        @ApplicationScope scope: CoroutineScope // Inject the qualified scope
+    ): LayoutRepository {
+        return LayoutRepository(context, scope)
     }
-
-    // Provides TabDatasource as a singleton
-    @Provides
-    @Singleton
-    fun provideTabDatasource(@ApplicationContext context: Context): TabDatasource {
-        return TabDatasource(context)
-    }
-
-    // Removed provideSoundPool() - SoundPlayer manages its own SoundPool internally
-
-    // Removed provideSoundPlayer() - Hilt can now inject SoundPlayer directly
-    // because its constructor is annotated with @Inject and the class with @Singleton.
 
     // Provides Vibrator system service (nullable)
     @Provides
@@ -72,18 +97,13 @@ object AppModule {
         }
     }
 
-
     // Provides VibratorManagerUtils as a singleton
-    // It depends on the nullable Vibrator? provided above
     @Provides
     @Singleton
     fun provideVibratorManagerUtils(vibrator: Vibrator?): VibratorManagerUtils {
-        // Pass the Vibrator? (nullable) to the constructor
-        // VibratorManagerUtils class should handle the null case internally
         return VibratorManagerUtils(vibrator)
     }
 
-    // Note: UdpSender is not provided here as a Singleton because its target IP/Port
-    // depends on the SettingDatasource flow. It's better managed within the ViewModel
-    // or a component that observes the flow.
+    // Note: SoundPlayer is likely injected directly via @Inject constructor
+    // Note: UdpSender is managed within the ViewModel based on network config flow
 }
