@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.* // Import all filled icons
 import androidx.compose.runtime.Composable // Keep this import for the return type
 import androidx.compose.runtime.State
@@ -24,6 +25,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -81,7 +83,10 @@ class MainViewModel @Inject constructor(
     private val _showManageLayoutsScreen = MutableStateFlow(false)
     val showManageLayoutsScreenState: StateFlow<Boolean> = _showManageLayoutsScreen.asStateFlow()
 
-    // --- Delete Confirmation State ---
+    // --- Add/Delete Dialog State ---
+    private val _showAddLayoutDialog = MutableStateFlow(false) // State for Add dialog
+    val showAddLayoutDialogState: StateFlow<Boolean> = _showAddLayoutDialog.asStateFlow()
+
     private val _showDeleteConfirmationDialog = MutableStateFlow(false)
     val showDeleteConfirmationDialogState: StateFlow<Boolean> = _showDeleteConfirmationDialog.asStateFlow()
 
@@ -414,6 +419,38 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /** Shows the dialog to add a new layout. */
+    fun requestAddLayout() {
+        Log.d(_tag, "Requesting Add Layout Dialog")
+        _showAddLayoutDialog.value = true
+    }
+
+    /** Creates and saves a new FreeForm layout based on user input from the dialog. */
+    fun confirmAddLayout(title: String, iconName: String) {
+        viewModelScope.launch {
+            // Generate a unique ID for the new layout
+            val newId = "freeform_${UUID.randomUUID()}"
+            val newLayout = LayoutDefinition(
+                id = newId,
+                title = title,
+                layoutType = LayoutType.FREE_FORM, // Hardcoded as FreeForm
+                iconName = iconName,
+                isEnabled = true, // Enabled by default
+                isUserDefined = true, // Marked as user-defined
+                isDeletable = true, // User-defined layouts are deletable
+                layoutItemsJson = null // Starts with no items
+            )
+            layoutRepository.addLayout(newLayout)
+            Log.i(_tag, "Added new layout: $newLayout")
+            _showAddLayoutDialog.value = false // Hide dialog after adding
+        }
+    }
+
+    /** Cancels the add layout operation and hides the dialog. */
+    fun cancelAddLayout() {
+        _showAddLayoutDialog.value = false
+    }
+
     // --- FreeForm Layout Item Events ---
     // These now need to get the current layout ID before saving items
     /** Saves the entire list of items for the currently selected FreeForm layout. */
@@ -495,17 +532,39 @@ class MainViewModel @Inject constructor(
 
     /** Maps a stored icon name string to the corresponding Material Icon ImageVector. */
     private fun mapIconName(name: String): ImageVector {
-        // Simple mapping based on names used in defaults. Extend as needed.
         return when (name) {
-            "Rocket" -> Icons.Filled.RocketLaunch // Example: Use RocketLaunch icon
+            "Adjust" -> Icons.Filled.Adjust
+            "Bolt" -> Icons.Filled.Bolt
+            "Build" -> Icons.Filled.Build
+            "Camera" -> Icons.Filled.Camera
+            "Construction" -> Icons.Filled.Construction
             "DashboardCustomize" -> Icons.Filled.DashboardCustomize
-            "Recycling" -> Icons.Filled.Recycling
             "Diamond" -> Icons.Filled.Diamond
+            "Flag" -> Icons.Filled.Flag
+            "Flight" -> Icons.Filled.Flight
+            "Gamepad" -> Icons.Filled.Gamepad
+            "Headset" -> Icons.Filled.Headset
+            "HelpOutline" -> Icons.AutoMirrored.Filled.HelpOutline
+            "Key" -> Icons.Filled.Key
+            "Lightbulb" -> Icons.Filled.Lightbulb
             "LocalFireDepartment" -> Icons.Filled.LocalFireDepartment
+            "Lock" -> Icons.Filled.Lock
+            "Map" -> Icons.Filled.Map
+            "Mic" -> Icons.Filled.Mic
+            "Navigation" -> Icons.Filled.Navigation
+            "Power" -> Icons.Filled.Power
+            "Recycling" -> Icons.Filled.Recycling
+            "Rocket" -> Icons.Filled.RocketLaunch
+            "SettingsInputComponent" -> Icons.Filled.SettingsInputComponent
+            "Shield" -> Icons.Filled.Shield
+            "Speed" -> Icons.Filled.Speed
+            "Star" -> Icons.Filled.Star
+            "Tune" -> Icons.Filled.Tune
+            "Videocam" -> Icons.Filled.Videocam
+            "Warning" -> Icons.Filled.Warning
+            "WbSunny" -> Icons.Filled.WbSunny
             "Widgets" -> Icons.Filled.Widgets
-            "Construction" -> Icons.Filled.Construction // Example for Mining/Salvage if specific icons used
-            // Add mappings for any other icons you might use
-            else -> Icons.Filled.HelpOutline // Default fallback icon
+            else -> Icons.AutoMirrored.Filled.HelpOutline // Default fallback icon
         }
     }
 

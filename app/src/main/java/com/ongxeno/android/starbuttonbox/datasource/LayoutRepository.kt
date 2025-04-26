@@ -64,7 +64,7 @@ class LayoutRepository @Inject constructor(
             prefs[PrefKeys.LAYOUT_ORDER_IDS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
         }
         .catch { e ->
-            Log.e(TAG, "Error reading layout order", e); emit(emptyList())
+            Log.e(TAG, "Error reading layout order", e); emit(emptyList()) // Emit empty on error too
         }
 
     /** Flow for the map of layout definitions. Returns empty map if not set. */
@@ -80,12 +80,12 @@ class LayoutRepository @Inject constructor(
                     json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), jsonString)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error decoding layout definitions, returning empty map: ${e.message}")
-                    emptyMap()
+                    emptyMap() // Return empty map on decoding error
                 }
             }
         }
         .catch { e ->
-            Log.e(TAG, "Error reading layout definitions", e); emit(emptyMap())
+            Log.e(TAG, "Error reading layout definitions", e); emit(emptyMap()) // Emit empty on read error
         }
 
     /** Flow for the index of the currently selected layout/tab. */
@@ -95,7 +95,10 @@ class LayoutRepository @Inject constructor(
             Log.e(TAG, "Error reading selected layout index", e); emit(0)
         }
 
-    /** Flow providing the ordered list of **all** LayoutDefinition objects. */
+    /**
+     * Flow providing the ordered list of **all** LayoutDefinition objects.
+     * Initial value is an empty list.
+     */
     val allLayoutDefinitionsFlow: Flow<List<LayoutDefinition>> = combine(
         layoutOrderIdsFlow,
         layoutDefinitionsFlow
@@ -104,17 +107,21 @@ class LayoutRepository @Inject constructor(
     }.stateIn(
         scope = externalScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = null // Start empty
-    ).filterNotNull()
+        initialValue = emptyList() // Start empty
+    )
 
-    /** Flow providing the ordered list of **enabled** LayoutDefinition objects. */
+    /**
+     * Flow providing the ordered list of **enabled** LayoutDefinition objects.
+     * Initial value is an empty list.
+     */
     val enabledLayoutDefinitionsFlow: Flow<List<LayoutDefinition>> = allLayoutDefinitionsFlow
         .map { allDefs -> allDefs.filter { it.isEnabled } }
         .stateIn(
             scope = externalScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = null
-        ).filterNotNull()
+            initialValue = emptyList() // Start empty
+        )
+
 
     /** Provides a Flow of the FreeForm items for a specific layout ID. */
     fun getLayoutItemsFlow(layoutId: String): Flow<List<FreeFormItemState>> {
@@ -135,6 +142,7 @@ class LayoutRepository @Inject constructor(
             .distinctUntilChanged()
             .catch { e -> Log.e(TAG, "Error in getLayoutItemsFlow for $layoutId", e); emit(emptyList()) }
     }
+
 
     // --- Suspend Functions for Saving Data ---
 
@@ -158,7 +166,7 @@ class LayoutRepository @Inject constructor(
                 prefs[PrefKeys.LAYOUT_DEFINITIONS] = jsonString
             }
             Log.i(TAG, "Saved layout definitions map.")
-        } catch (e: Exception) {
+        } catch (e: Exception) { // Catch broader exceptions during serialization/saving
             Log.e(TAG, "Error saving layout definitions map", e)
         }
     }
@@ -308,6 +316,48 @@ class LayoutRepository @Inject constructor(
             Log.e(TAG, "Error deleting layout '$layoutId'", e)
         }
     }
+
+    /** Adds a new layout definition and updates the order. */
+    suspend fun addLayout(newDefinition: LayoutDefinition) {
+        try {
+            context.layoutDataStore.edit { prefs ->
+                // Add to Definitions
+                val currentDefJson = prefs[PrefKeys.LAYOUT_DEFINITIONS]
+                val currentDefinitions = if (currentDefJson.isNullOrBlank()) {
+                    mutableMapOf()
+                } else {
+                    try {
+                        json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefJson).toMutableMap()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error decoding definitions in addLayout, starting fresh.", e)
+                        mutableMapOf()
+                    }
+                }
+                // Check for ID collision (should be unlikely with UUID, but good practice)
+                if (currentDefinitions.containsKey(newDefinition.id)) {
+                    Log.e(TAG, "Layout ID collision detected for '${newDefinition.id}'. Aborting add.")
+                    return@edit // Or handle differently, e.g., generate new ID
+                }
+                currentDefinitions[newDefinition.id] = newDefinition
+                prefs[PrefKeys.LAYOUT_DEFINITIONS] = json.encodeToString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefinitions)
+                Log.i(TAG, "Added layout definition for '${newDefinition.id}'.")
+
+                // Add to Order (append to the end)
+                val currentOrderStr = prefs[PrefKeys.LAYOUT_ORDER_IDS]
+                val currentOrder = if (currentOrderStr.isNullOrBlank()) {
+                    mutableListOf()
+                } else {
+                    currentOrderStr.split(',').filter { it.isNotBlank() }.toMutableList()
+                }
+                currentOrder.add(newDefinition.id)
+                prefs[PrefKeys.LAYOUT_ORDER_IDS] = currentOrder.joinToString(",")
+                Log.i(TAG, "Added '${newDefinition.id}' to layout order.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding layout '${newDefinition.id}'", e)
+        }
+    }
+
 
     /** Adds the default layouts to DataStore. Should only be called if layouts are confirmed empty. */
     suspend fun addDefaultLayouts() {

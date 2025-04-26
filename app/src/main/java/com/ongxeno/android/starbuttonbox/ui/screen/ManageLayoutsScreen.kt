@@ -19,6 +19,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
+import com.ongxeno.android.starbuttonbox.ui.dialog.AddLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -33,6 +34,7 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
     // Collect state from ViewModel
     val layouts by viewModel.allLayoutsState.collectAsStateWithLifecycle() // Use all layouts here
     val showDeleteDialog by viewModel.showDeleteConfirmationDialogState.collectAsStateWithLifecycle()
+    val showAddDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
     val layoutToDelete by viewModel.layoutToDeleteState
     val density = LocalDensity.current.density
 
@@ -104,8 +106,8 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                     }
                     // New Layout Button (Placeholder)
                     TextButton(
-                        onClick = { /* TODO: Implement Add Layout */ },
-                        enabled = false // Disabled for now
+                        onClick = { viewModel.requestAddLayout() }, // Call ViewModel to show dialog
+                        enabled = true // Enable the button
                     ) {
                         Text("New")
                     }
@@ -145,6 +147,16 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                     modifier = Modifier // Pass a base modifier if needed, but not the drag one
                 )
             }
+        }
+
+        // Add Layout Dialog
+        if (showAddDialog) {
+            AddLayoutDialog(
+                onDismissRequest = { viewModel.cancelAddLayout() },
+                onConfirm = { title, iconName ->
+                    viewModel.confirmAddLayout(title, iconName)
+                }
+            )
         }
 
         // Confirmation Dialog

@@ -8,6 +8,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -124,7 +128,9 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
         // Show loading indicator or main content based on isLoading state
         if (isLoading) {
             Box(
-                modifier = Modifier.fillMaxSize().background(Color.Black), // Match background
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black), // Match background
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
@@ -198,7 +204,17 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
         }
 
         // --- Settings Screen (Overlay) ---
-        if (showSettingsScreen) {
+        AnimatedVisibility(
+            visible = showSettingsScreen,
+            enter = slideInHorizontally(
+                initialOffsetX = { fullWidth -> fullWidth },
+                animationSpec = tween(durationMillis = 300)
+            ),
+            exit = slideOutHorizontally(
+                targetOffsetX = { fullWidth -> fullWidth },
+                animationSpec = tween(durationMillis = 300)
+            )
+        ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
@@ -208,7 +224,17 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
         }
 
         // --- Manage Layouts Screen (Overlay) ---
-        if (showManageLayoutsScreen) {
+        AnimatedVisibility(
+            visible = showManageLayoutsScreen,
+            enter = slideInHorizontally(
+                initialOffsetX = { fullWidth -> fullWidth },
+                animationSpec = tween(durationMillis = 300)
+            ),
+            exit = slideOutHorizontally(
+                targetOffsetX = { fullWidth -> fullWidth },
+                animationSpec = tween(durationMillis = 300)
+            )
+        ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
