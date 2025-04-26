@@ -55,6 +55,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -184,6 +185,7 @@ fun SafetyButton(
     // Effect to play sounds when cover state changes and reset button state
     LaunchedEffect(dragState) {
         snapshotFlow { dragState.targetValue } // Observe the target value for smoother sound timing
+            .drop(1)
             .distinctUntilChanged()
             .collect { targetState ->
                 when(targetState) {
