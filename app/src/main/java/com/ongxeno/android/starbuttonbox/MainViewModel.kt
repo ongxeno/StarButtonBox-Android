@@ -23,6 +23,7 @@ import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo // Import UI model
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -192,6 +193,7 @@ class MainViewModel @Inject constructor(
             } finally {
                 // 4. Set loading to false only after all checks and potential waits are done
                 Log.d(_tag, "App data initialization complete. Setting isLoading to false.")
+                delay(500)
                 _isLoading.value = false
             }
         }
@@ -325,20 +327,9 @@ class MainViewModel @Inject constructor(
         // _showSettingsScreen.value = true
     }
 
-    /** Reorders the layouts based on drag-and-drop indices and saves the new order. */
-    fun reorderLayouts(fromIndex: Int, toIndex: Int) {
+    fun saveLayoutOrder(orderedIds: List<String>) {
         viewModelScope.launch {
-            val currentLayouts = allLayoutsState.value // Get current full list (including disabled)
-            if (fromIndex in currentLayouts.indices && toIndex in currentLayouts.indices) {
-                val mutableList = currentLayouts.toMutableList()
-                val movedItem = mutableList.removeAt(fromIndex)
-                mutableList.add(toIndex, movedItem)
-                val newOrderIds = mutableList.map { it.id } // Get IDs in the new order
-                layoutRepository.saveLayoutOrder(newOrderIds)
-                Log.i(_tag, "Reordered layouts. New order IDs: $newOrderIds")
-            } else {
-                Log.e(_tag, "Invalid indices for reordering: from=$fromIndex, to=$toIndex")
-            }
+            layoutRepository.saveLayoutOrder(orderedIds)
         }
     }
 

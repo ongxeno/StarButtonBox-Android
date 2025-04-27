@@ -52,7 +52,7 @@ import kotlin.math.roundToInt
 // --- Grid Configuration ---
 private const val GRID_COLUMNS = 60
 private const val GRID_ROWS = 35
-private val gridLineColor = Color.Gray.copy(alpha = 0.2f)
+private val gridLineColor = Color.Gray.copy(alpha = 0.7f)
 private val gridStrokeWidth = 1.dp
 private val gridPathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 8f), 0f)
 

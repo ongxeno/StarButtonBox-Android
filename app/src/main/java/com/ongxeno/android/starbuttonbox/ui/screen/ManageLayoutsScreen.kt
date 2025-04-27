@@ -1,87 +1,102 @@
-package com.ongxeno.android.starbuttonbox.ui.screen // Ensure correct package
+package com.ongxeno.android.starbuttonbox.ui.screen
 
-import androidx.compose.foundation.gestures.detectDragGestures // Changed from detectDragGesturesAfterLongPress
+// Removed Log import
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.* // Import Material 3 components
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+// Removed SnapshotStateList import
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color // Import Color
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity // Import LocalDensity
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
-import com.ongxeno.android.starbuttonbox.ui.dialog.AddLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+// Removed Job and launch imports (no longer needed here)
+import kotlin.math.roundToInt
 
 /**
  * Screen for managing layouts: reordering, deleting, hiding/showing, and adding new ones.
- * Drag starts immediately on the drag handle.
+ * Drag starts immediately on the drag handle. Relies on ViewModel for final reorder state.
  */
-@OptIn(ExperimentalMaterial3Api::class) // OptIn for TopAppBar
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManageLayoutsScreen(viewModel: MainViewModel) {
-    // Collect state from ViewModel
-    val layouts by viewModel.allLayoutsState.collectAsStateWithLifecycle() // Use all layouts here
+    // Collect state directly from ViewModel
+    val layouts by viewModel.allLayoutsState.collectAsStateWithLifecycle()
     val showDeleteDialog by viewModel.showDeleteConfirmationDialogState.collectAsStateWithLifecycle()
-    val showAddDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
     val layoutToDelete by viewModel.layoutToDeleteState
+    val showAddDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
     val density = LocalDensity.current.density
 
-    // State for drag and drop
-    var overscrollJob by remember { mutableStateOf<Job?>(null) }
-    val scope = rememberCoroutineScope()
+    // --- Local state ONLY for drag visuals ---
     var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
-    var dragOffset by remember { mutableStateOf(0f) }
+    // Removed dragStartY state (not strictly needed for offset calculation)
+    var dragCurrentOffsetY by remember { mutableStateOf(0f) }
 
-    // Drag and drop handlers
-    fun onMove(from: Int, to: Int) {
-        if (from != to && from in layouts.indices && to in layouts.indices) { // Check bounds against 'layouts'
-            viewModel.reorderLayouts(from, to)
-        }
-        // Reset state after triggering move, list will recompose from VM state
-        draggingItemIndex = null
-        dragOffset = 0f
-    }
+    val currentDraggingItemIndex = draggingItemIndex
+    val itemHeightPx = remember(density) { (72.dp * density).value } // Approx height + padding in px
 
+    // --- Drag and drop handlers ---
     fun onDragStart(index: Int) {
+        // Prevent dragging if list is empty or invalid index
+        if (index !in layouts.indices) return
         draggingItemIndex = index
-        dragOffset = 0f
+        dragCurrentOffsetY = 0f
     }
 
     fun onDragEnd() {
+        val startIndex = draggingItemIndex // Capture the start index
+
+        if (startIndex != null && startIndex in layouts.indices) { // Check if startIndex is valid
+            // Calculate the final target index based on the final offset
+            val movedBy = if (itemHeightPx > 0) (dragCurrentOffsetY / itemHeightPx).roundToInt() else 0
+            val endIndex = (startIndex + movedBy).coerceIn(layouts.indices) // Use layouts.indices
+
+            if (startIndex != endIndex) {
+                // Calculate the list of IDs in the *intended* final order
+                val currentIds = layouts.map { it.id }.toMutableList()
+                // Ensure startIndex is still valid before removing (list might have changed)
+                if(startIndex < currentIds.size){
+                    val movedId = currentIds.removeAt(startIndex)
+                    // Ensure endIndex is valid for insertion
+                    val safeEndIndex = endIndex.coerceAtMost(currentIds.size)
+                    currentIds.add(safeEndIndex, movedId)
+                    // Call ViewModel to save the new order
+                    viewModel.saveLayoutOrder(currentIds)
+                }
+            }
+        }
+        // Reset drag state AFTER calculations and VM call
         draggingItemIndex = null
-        dragOffset = 0f
+        dragCurrentOffsetY = 0f
     }
 
-    // onDrag lambda now uses the density captured from the outer scope
-    fun onDrag(offset: Float) {
-        dragOffset += offset
-        draggingItemIndex?.let { index ->
-            val itemHeightDp = 72.dp // Approximate height
-            // Use the captured density value here
-            val itemHeightPx = itemHeightDp.value * density
-            // Avoid division by zero if itemHeightPx is somehow zero
-            if (itemHeightPx > 0) {
-                val movedBy = (dragOffset / itemHeightPx).toInt()
-                val targetIndex = (index + movedBy).coerceIn(0, layouts.lastIndex)
-                if (targetIndex != index) {
-                    onMove(index, targetIndex)
-                    // Update dragging index immediately after move is triggered
-                    draggingItemIndex = targetIndex
-                    // Reset offset after move to prevent accumulating large offsets across multiple moves
-                    dragOffset = 0f
-                }
+    fun onDrag(changeY: Float) {
+        // Only update offset if currently dragging
+        if (draggingItemIndex != null) {
+            dragCurrentOffsetY += changeY
+        }
+    }
+
+    // Calculate target index for visual feedback during drag
+    val targetIndexForFeedback by remember(currentDraggingItemIndex, dragCurrentOffsetY) {
+        derivedStateOf {
+            currentDraggingItemIndex?.let { startIndex ->
+                val movedBy = if(itemHeightPx > 0) (dragCurrentOffsetY / itemHeightPx).roundToInt() else 0
+                // Use layouts.indices for bounds
+                (startIndex + movedBy).coerceIn(layouts.indices)
             }
         }
     }
@@ -89,7 +104,7 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
 
     Scaffold(
         topBar = {
-            TopAppBar( // Requires OptIn(ExperimentalMaterial3Api::class)
+            TopAppBar(
                 title = { Text("Manage Layouts") },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.hideManageLayoutsScreen() }) {
@@ -97,24 +112,13 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                     }
                 },
                 actions = {
-                    // Import Button (Placeholder)
-                    TextButton(
-                        onClick = { /* TODO: Implement Import Layout */ },
-                        enabled = false // Disabled for now
-                    ) {
-                        Text("Import")
-                    }
-                    // New Layout Button (Placeholder)
-                    TextButton(
-                        onClick = { viewModel.requestAddLayout() }, // Call ViewModel to show dialog
-                        enabled = true // Enable the button
-                    ) {
-                        Text("New")
-                    }
+                    TextButton(onClick = { /* TODO: Implement Import Layout */ }, enabled = false) { Text("Import") }
+                    TextButton(onClick = { viewModel.requestAddLayout() }, enabled = true) { Text("New") }
                 }
             )
         }
     ) { paddingValues ->
+        // Use the layouts list directly from the ViewModel state
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -122,19 +126,20 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                 .padding(horizontal = 8.dp)
         ) {
             itemsIndexed(layouts, key = { _, item -> item.id }) { index, layoutInfo ->
-                val isDragging = index == draggingItemIndex
-                val currentDragOffset = if (isDragging) dragOffset else 0f
+                val isCurrentlyDragging = index == draggingItemIndex
+                val visualOffset = if (isCurrentlyDragging) dragCurrentOffsetY else 0f
+                val isTarget = !isCurrentlyDragging && index == targetIndexForFeedback && draggingItemIndex != null
 
                 LayoutListItem(
                     layoutInfo = layoutInfo,
-                    isDragging = isDragging,
-                    dragOffset = currentDragOffset,
-                    // Pass the drag gesture modifier factory for the handle
-                    dragHandleModifier = Modifier.pointerInput(Unit) {
-                        detectDragGestures( // Changed from detectDragGesturesAfterLongPress
-                            onDragStart = { onDragStart(index) },
+                    isDragging = isCurrentlyDragging,
+                    isTarget = isTarget,
+                    dragOffset = visualOffset,
+                    dragHandleModifier = Modifier.pointerInput(layouts) { // Pass layouts as key
+                        detectDragGestures(
+                            onDragStart = { onDragStart(index) }, // Simplified call
                             onDragEnd = { onDragEnd() },
-                            onDragCancel = { onDragEnd() },
+                            onDragCancel = { onDragEnd() }, // Also reset on cancel
                             onDrag = { change, dragAmount ->
                                 change.consume()
                                 onDrag(dragAmount.y)
@@ -143,25 +148,21 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                     },
                     onToggleVisibilityClick = { viewModel.toggleLayoutEnabled(layoutInfo.id) },
                     onDeleteClick = { viewModel.requestDeleteLayout(layoutInfo) },
-                    // Remove pointerInput from the item's main modifier
-                    modifier = Modifier // Pass a base modifier if needed, but not the drag one
+                    modifier = Modifier
                 )
             }
         }
 
         // Add Layout Dialog
         if (showAddDialog) {
-            AddLayoutDialog(
+            com.ongxeno.android.starbuttonbox.ui.dialog.AddLayoutDialog(
                 onDismissRequest = { viewModel.cancelAddLayout() },
-                onConfirm = { title, iconName ->
-                    viewModel.confirmAddLayout(title, iconName)
-                }
+                onConfirm = { title, iconName -> viewModel.confirmAddLayout(title, iconName) }
             )
         }
 
-        // Confirmation Dialog
+        // Delete Confirmation Dialog
         if (showDeleteDialog) {
-            // Use correct import path for dialog
             com.ongxeno.android.starbuttonbox.ui.dialog.DeleteConfirmationDialog(
                 layoutInfo = layoutToDelete,
                 onConfirm = { viewModel.confirmDeleteLayout() },
@@ -173,24 +174,27 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
 
 /**
  * Composable for displaying a single layout item in the management list.
- * Now accepts a specific modifier for the drag handle.
  */
 @Composable
 private fun LayoutListItem(
     layoutInfo: LayoutInfo,
     isDragging: Boolean,
+    isTarget: Boolean,
     dragOffset: Float,
-    dragHandleModifier: Modifier, // Modifier specifically for the drag handle
+    dragHandleModifier: Modifier,
     onToggleVisibilityClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    modifier: Modifier = Modifier // General modifier for the Card
+    modifier: Modifier = Modifier
 ) {
     val itemColor = if (layoutInfo.isEnabled) LocalContentColor.current else Color.Gray.copy(alpha = 0.6f)
     val visibilityIcon = if (layoutInfo.isEnabled) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
     val visibilityDesc = if (layoutInfo.isEnabled) "Hide Layout" else "Show Layout"
+    val cardBorder = if (isTarget) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+    val containerColor = if (isTarget) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant
+    val cardColors = CardDefaults.cardColors( containerColor = containerColor )
 
     Card(
-        modifier = modifier // Apply general modifier to the Card
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .graphicsLayer {
@@ -199,7 +203,9 @@ private fun LayoutListItem(
                 alpha = if (isDragging) 0.9f else if (!layoutInfo.isEnabled) 0.7f else 1f
             }
             .zIndex(if (isDragging) 1f else 0f),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 2.dp),
+        border = cardBorder,
+        colors = cardColors
     ) {
         Row(
             modifier = Modifier
@@ -207,12 +213,10 @@ private fun LayoutListItem(
                 .padding(horizontal = 8.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Apply the specific drag handle modifier ONLY to the DragHandle Icon
             Icon(
                 imageVector = Icons.Filled.DragHandle,
                 contentDescription = "Drag to reorder",
-                // Apply the dragHandleModifier here
-                modifier = dragHandleModifier.size(24.dp),
+                modifier = dragHandleModifier.size(24.dp), // Apply drag modifier here
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.width(16.dp))
