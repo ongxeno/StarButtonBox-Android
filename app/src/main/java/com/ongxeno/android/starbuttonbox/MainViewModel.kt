@@ -1,6 +1,7 @@
 package com.ongxeno.android.starbuttonbox
 
 import android.content.Context
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -21,11 +22,17 @@ import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.* // Import layout composables
 import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo // Import UI model
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.util.UUID
 import javax.inject.Inject
 
@@ -40,8 +47,9 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val settingDatasource: SettingDatasource,
     // Inject the new LayoutRepository
-    private val layoutRepository: LayoutRepository
+    private val layoutRepository: LayoutRepository,
     // Inject other dependencies like SoundPlayer, VibratorManagerUtils if needed directly here
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _tag = "MainViewModel"
@@ -94,6 +102,13 @@ class MainViewModel @Inject constructor(
     private val _layoutToDeleteState = mutableStateOf<LayoutInfo?>(null) // Store the LayoutInfo to be deleted
     val layoutToDeleteState: State<LayoutInfo?> = _layoutToDeleteState
 
+    // State for Import Result Dialog
+    private val _importResult = MutableStateFlow<ImportResult>(ImportResult.Idle)
+    val importResultState: StateFlow<ImportResult> = _importResult.asStateFlow()
+
+    // State to hold the ID of the layout currently requested for export
+    private val _layoutToExportId = MutableStateFlow<String?>(null)
+    // val layoutToExportIdState: StateFlow<String?> = _layoutToExportId.asStateFlow() // Expose if needed elsewhere
 
     // --- Keep Screen On State ---
     val keepScreenOnState: StateFlow<Boolean> = settingDatasource.keepScreenOnFlow
@@ -102,6 +117,9 @@ class MainViewModel @Inject constructor(
     // --- Internal State ---
     private var udpSender: UdpSender? = null
     private var udpSenderJob: Job? = null
+
+    // JSON parser for import/export
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     // --- FreeForm Layout Items State ---
     // Flow for the ID of the currently selected *enabled* layout
@@ -158,7 +176,7 @@ class MainViewModel @Inject constructor(
                 // 2. Check if default layouts need to be added
                 // Wait for the first emission from the raw definitions flow
                 val currentDefinitions = layoutRepository.layoutDefinitionsFlow.first()
-                val currentEnableDefinitions = layoutRepository.enabledLayoutDefinitionsFlow.first()
+                layoutRepository.enabledLayoutDefinitionsFlow.first()
                 Log.d(_tag, "initializeAppData: First definitions value from source: ${currentDefinitions.size} items")
                 if (currentDefinitions.isEmpty()) {
                     Log.i(_tag, "Layout definitions are empty, adding defaults.")
@@ -441,6 +459,144 @@ class MainViewModel @Inject constructor(
         _showAddLayoutDialog.value = false
     }
 
+    /** Dismisses the import result dialog. */
+    fun dismissImportResult() {
+        _importResult.value = ImportResult.Idle
+    }
+
+    // --- Import / Export ---
+
+    /** Stores the ID of the layout the user wants to export. */
+    fun requestExportLayout(layoutId: String) {
+        Log.d(_tag, "Requesting export for layout ID: $layoutId")
+        _layoutToExportId.value = layoutId
+        // The UI will observe this (if needed) or just launch the SAF picker
+    }
+
+    /** Clears the stored layout ID after an export attempt. */
+    fun clearExportRequest() {
+        _layoutToExportId.value = null
+    }
+
+    /**
+     * Exports the layout identified by the current `_layoutToExportId` state to the given URI.
+     * Called *after* the user selects a destination file via SAF.
+     *
+     * @param uri The content URI chosen by the user via SAF.
+     */
+    fun exportLayoutToFile(uri: Uri) {
+        val layoutId = _layoutToExportId.value // Get the ID stored previously
+        if (layoutId == null) {
+            Log.e(_tag, "Export failed: No layout ID was set for export.")
+            // TODO: Show error message to user
+            clearExportRequest() // Clear the state even on failure
+            return
+        }
+
+        viewModelScope.launch {
+            Log.d(_tag, "Attempting to export layout '$layoutId' to URI: $uri")
+            val definition = layoutRepository.allLayoutDefinitionsFlow.first()
+                .find { it.id == layoutId }
+
+            if (definition == null) {
+                Log.e(_tag, "Export failed: Layout definition not found for ID '$layoutId'")
+                // TODO: Show error message
+            } else if (definition.layoutType != LayoutType.FREE_FORM) {
+                Log.e(_tag, "Export failed: Layout '$layoutId' is not a FreeForm layout.")
+                // TODO: Show error message
+            } else {
+                // Get the items
+                val items = layoutRepository.getLayoutItemsFlow(layoutId).first()
+                val exportedData = ExportedLayout(definition = definition, items = items)
+
+                try {
+                    val jsonString = json.encodeToString(ExportedLayout.serializer(), exportedData)
+                    appContext.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        OutputStreamWriter(outputStream).use { writer ->
+                            writer.write(jsonString)
+                        }
+                    }
+                    Log.i(_tag, "Successfully exported layout '$layoutId' to $uri")
+                    // TODO: Show success message
+                } catch (e: Exception) {
+                    Log.e(_tag, "Export failed for layout '$layoutId' to $uri", e)
+                    // TODO: Show error message
+                }
+            }
+            // Clear the export request state regardless of success/failure
+            clearExportRequest()
+        }
+    }
+
+    /**
+     * Imports a layout from a chosen file URI.
+     * This function is called by the Composable after the user selects a file via SAF.
+     *
+     * @param uri The content URI chosen by the user via SAF.
+     */
+    fun importLayoutFromFile(uri: Uri) {
+        viewModelScope.launch {
+            Log.d(_tag, "Attempting to import layout from URI: $uri")
+            try {
+                val jsonString = appContext.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    BufferedReader(InputStreamReader(inputStream)).use { reader ->
+                        reader.readText()
+                    }
+                }
+
+                if (jsonString.isNullOrBlank()) {
+                    _importResult.value = ImportResult.Failure("Selected file is empty.")
+                    return@launch
+                }
+
+                val importedLayout = json.decodeFromString(ExportedLayout.serializer(), jsonString)
+
+                // --- Validation ---
+                if (importedLayout.definition.layoutType != LayoutType.FREE_FORM) {
+                    _importResult.value = ImportResult.Failure("Import failed: Only FreeForm layouts can be imported.")
+                    return@launch
+                }
+                if (importedLayout.definition.title.isBlank()) {
+                    _importResult.value = ImportResult.Failure("Import failed: Layout title cannot be empty.")
+                    return@launch
+                }
+                // Basic check for icon name validity (optional, depends on how strict you want to be)
+                try { mapIconName(importedLayout.definition.iconName) } catch (_: Exception) {
+                    _importResult.value = ImportResult.Failure("Import failed: Invalid icon name '${importedLayout.definition.iconName}'.")
+                    return@launch
+                }
+
+
+                // --- Create New Definition ---
+                val newId = "freeform_${UUID.randomUUID()}" // Generate new ID to avoid collisions
+                val itemsJson = try {
+                    json.encodeToString(ListSerializer(FreeFormItemState.serializer()), importedLayout.items ?: emptyList())
+                } catch (e: Exception) {
+                    Log.e(_tag, "Error serializing imported items, saving as empty", e)
+                    null // Save as null/empty if items are invalid
+                }
+
+                val newDefinition = importedLayout.definition.copy(
+                    id = newId, // Use new ID
+                    isUserDefined = true, // Imported layouts are treated as user-defined
+                    isDeletable = true, // Imported layouts are deletable
+                    isEnabled = true, // Enable by default
+                    layoutItemsJson = itemsJson // Use the re-serialized (or null) items JSON
+                )
+
+                // Add to repository
+                layoutRepository.addLayout(newDefinition)
+
+                Log.i(_tag, "Successfully imported layout '${newDefinition.title}' with new ID '$newId'")
+                _importResult.value = ImportResult.Success(newDefinition, importedLayout.items?.size ?: 0)
+
+            } catch (e: Exception) {
+                Log.e(_tag, "Import failed from $uri", e)
+                _importResult.value = ImportResult.Failure("Import failed: ${e.localizedMessage ?: "Unknown error"}")
+            }
+        }
+    }
+
     // --- FreeForm Layout Item Events ---
     // These now need to get the current layout ID before saving items
     /** Saves the entire list of items for the currently selected FreeForm layout. */
@@ -455,55 +611,6 @@ class MainViewModel @Inject constructor(
             }
         }
     }
-
-    /** Saves changes to a single FreeForm item within the current layout. */
-    fun saveFreeFormItem(updatedItem: FreeFormItemState) {
-        viewModelScope.launch {
-            val layoutId = selectedLayoutIdFlow.first()
-            if (layoutId != null) {
-                // Get the latest list, update the item, and save
-                val currentItems = layoutRepository.getLayoutItemsFlow(layoutId).first().toMutableList()
-                val index = currentItems.indexOfFirst { it.id == updatedItem.id }
-                if (index != -1) {
-                    currentItems[index] = updatedItem
-                    Log.d(_tag, "Saving single item update for ID: ${updatedItem.id} in layout $layoutId")
-                    layoutRepository.saveLayoutItems(layoutId, currentItems)
-                } else { Log.w(_tag, "Item not found for saving: ${updatedItem.id}") }
-            } else { Log.w(_tag, "Cannot save item, selectedLayoutId is null.") }
-        }
-    }
-
-    /** Adds a new item to the current FreeForm layout. */
-    fun addFreeFormItem(text: String, commandString: String, type: FreeFormItemType, textSizeSp: Float?, backgroundColorHex: String?) {
-        viewModelScope.launch {
-            val layoutId = selectedLayoutIdFlow.first()
-            if (layoutId != null) {
-                val newItem = FreeFormItemState(text = text, commandString = commandString, type = type, textSizeSp = textSizeSp, backgroundColorHex = backgroundColorHex)
-                // Get the latest list, add the new item, and save
-                val currentItems = layoutRepository.getLayoutItemsFlow(layoutId).first().toMutableList()
-                currentItems.add(newItem)
-                Log.d(_tag, "Adding new item to layout $layoutId")
-                layoutRepository.saveLayoutItems(layoutId, currentItems)
-            } else { Log.w(_tag, "Cannot add item, selectedLayoutId is null.") }
-        }
-    }
-
-    /** Deletes an item from the current FreeForm layout by its ID. */
-    fun deleteFreeFormItem(itemId: String) {
-        viewModelScope.launch {
-            val layoutId = selectedLayoutIdFlow.first()
-            if (layoutId != null) {
-                // Get the latest list, remove the item, and save
-                val currentItems = layoutRepository.getLayoutItemsFlow(layoutId).first().toMutableList()
-                val removed = currentItems.removeIf { it.id == itemId }
-                if(removed) {
-                    Log.d(_tag, "Deleting item $itemId from layout $layoutId")
-                    layoutRepository.saveLayoutItems(layoutId, currentItems)
-                } else { Log.w(_tag, "Item not found for deletion: $itemId") }
-            } else { Log.w(_tag, "Cannot delete item, selectedLayoutId is null.") }
-        }
-    }
-
 
     // --- Helper / Mapping Functions (Moved from Repository) ---
 

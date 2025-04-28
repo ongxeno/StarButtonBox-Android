@@ -2,6 +2,9 @@ package com.ongxeno.android.starbuttonbox.ui.screen
 
 // Removed AnimationSpec and FiniteAnimationSpec imports as we won't conditionally set the spec anymore
 // Removed snap import
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -19,12 +22,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 // Removed IntOffset import (not needed for this approach)
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
+import com.ongxeno.android.starbuttonbox.data.ImportResult
+import com.ongxeno.android.starbuttonbox.data.LayoutType
+import com.ongxeno.android.starbuttonbox.ui.dialog.ImportResultDialog
 import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
 import kotlin.math.roundToInt
 
@@ -41,7 +48,31 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
     val showDeleteDialog by viewModel.showDeleteConfirmationDialogState.collectAsStateWithLifecycle()
     val layoutToDelete by viewModel.layoutToDeleteState
     val showAddDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
+    val importResult by viewModel.importResultState.collectAsStateWithLifecycle()
     val density = LocalDensity.current.density
+
+    // --- Activity Result Launchers for SAF ---
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        // The URI is received here AFTER the user selects a file destination.
+        // Call the ViewModel function to perform the actual export using the URI
+        // and the previously stored layout ID.
+        uri?.let {
+            viewModel.exportLayoutToFile(it)
+        } ?: run {
+            // Handle case where user cancelled file selection (optional)
+            viewModel.clearExportRequest() // Clear the request state if cancelled
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.importLayoutFromFile(it)
+        }
+    }
 
     // --- Local state for drag visuals ---
     var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
@@ -70,7 +101,7 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
 
     fun onDragEnd() {
         val startIndex = draggingItemIndex
-        var movedId: String? = null
+        var movedId: String?
 
         if (startIndex != null && startIndex in layouts.indices) {
             val movedBy = if (itemHeightPx > 0) (dragCurrentOffsetY / itemHeightPx).roundToInt() else 0
@@ -119,8 +150,18 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                     }
                 },
                 actions = {
-                    TextButton(onClick = { /* TODO: Implement Import Layout */ }, enabled = false) { Text("Import") }
-                    TextButton(onClick = { viewModel.requestAddLayout() }, enabled = true) { Text("New") }
+                    TextButton(
+                        onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) }, // Allow JSON or any file for import
+                        enabled = true
+                    ) {
+                        Text("Import")
+                    }
+                    TextButton(
+                        onClick = { viewModel.requestAddLayout() },
+                        enabled = true
+                    ) {
+                        Text("New")
+                    }
                 }
             )
         }
@@ -167,6 +208,12 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                         )
                     },
                     onToggleVisibilityClick = { viewModel.toggleLayoutEnabled(layoutInfo.id) },
+                    // Export Action: Store ID in temp state and launch SAF
+                    onExportClick = {
+                        viewModel.requestExportLayout(layoutInfo.id) // Set the ID in VM state
+                        val suggestedName = "${layoutInfo.title.replace(" ", "_")}.json"
+                        exportLauncher.launch(suggestedName) // Launch the file creator
+                    },
                     onDeleteClick = { viewModel.requestDeleteLayout(layoutInfo) },
                     // Pass the conditionally created modifier
                     modifier = itemModifier
@@ -190,6 +237,14 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                 onDismiss = { viewModel.cancelDeleteLayout() }
             )
         }
+
+        // Import Result Dialog
+        if (importResult != ImportResult.Idle) {
+            ImportResultDialog( // Use correct import path if needed
+                importResult = importResult,
+                onDismiss = { viewModel.dismissImportResult() }
+            )
+        }
     }
 }
 
@@ -202,10 +257,11 @@ private fun LayoutListItem(
     isDragging: Boolean,
     isTargetDropSlot: Boolean,
     dragOffset: Float,
-    dragHandleModifier: Modifier,
     onToggleVisibilityClick: () -> Unit,
+    onExportClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    modifier: Modifier = Modifier // Base modifier, potentially includes animateItem
+    dragHandleModifier: Modifier,
+    modifier: Modifier = Modifier
 ) {
     val itemColor = if (layoutInfo.isEnabled) LocalContentColor.current else Color.Gray.copy(alpha = 0.6f)
     val visibilityIcon = if (layoutInfo.isEnabled) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
@@ -213,18 +269,18 @@ private fun LayoutListItem(
     val cardBorder = if (isTargetDropSlot) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
     val containerColor = if (isTargetDropSlot) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant
     val cardColors = CardDefaults.cardColors( containerColor = containerColor )
+    val iconButtonSize = 48.dp // Standard minimum touch target size
 
     Card(
-        // Apply the modifier passed from the LazyColumn item scope
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .graphicsLayer {
-                translationY = if (isDragging) dragOffset else 0f // Only dragged item uses offset
+                translationY = if (isDragging) dragOffset else 0f
                 shadowElevation = if (isDragging) 8f else 1f
                 alpha = if (isDragging) 0.9f else if (!layoutInfo.isEnabled) 0.7f else 1f
             }
-            .zIndex(if (isDragging) 1f else 0f), // Lift dragging item
+            .zIndex(if (isDragging) 1f else 0f),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 2.dp),
         border = cardBorder,
         colors = cardColors
@@ -232,46 +288,73 @@ private fun LayoutListItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .defaultMinSize(minHeight = 56.dp) // Ensure row has a minimum height
+                .padding(start = 8.dp, end = 4.dp), // Adjust end padding slightly for buttons
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Filled.DragHandle,
-                contentDescription = "Drag to reorder",
-                modifier = dragHandleModifier.size(24.dp), // Apply drag modifier here
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(16.dp))
+            // Drag Handle
+            Box(modifier = dragHandleModifier.size(iconButtonSize), contentAlignment = Alignment.Center) { // Wrap in Box for consistent size
+                Icon(
+                    imageVector = Icons.Filled.DragHandle,
+                    contentDescription = "Drag to reorder",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(8.dp)) // Reduced spacer
+
+            // Layout Icon
             Icon(
                 imageVector = layoutInfo.icon,
                 contentDescription = null,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(24.dp), // Keep icon visual size consistent
                 tint = itemColor
             )
             Spacer(Modifier.width(16.dp))
+
+            // Title
             Text(
                 text = layoutInfo.title,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f), // Takes available space
                 style = MaterialTheme.typography.bodyLarge,
-                color = itemColor
+                color = itemColor,
+                maxLines = 2 // Allow title to wrap if long
             )
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = onToggleVisibilityClick) {
+            Spacer(Modifier.width(8.dp)) // Space before action buttons
+
+            // Action Buttons Group (aligned to end)
+            // Export Button (Conditional)
+            if (layoutInfo.type == LayoutType.FREE_FORM) {
+                IconButton(onClick = onExportClick, modifier = Modifier.size(iconButtonSize)) {
+                    Icon(
+                        imageVector = Icons.Filled.IosShare,
+                        contentDescription = "Export Layout",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                // Reserve space even if button isn't shown
+                Spacer(Modifier.width(iconButtonSize))
+            }
+
+            // Visibility Toggle Button
+            IconButton(onClick = onToggleVisibilityClick, modifier = Modifier.size(iconButtonSize)) {
                 Icon(
                     imageVector = visibilityIcon,
                     contentDescription = visibilityDesc,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(Modifier.width(4.dp))
+
+            // Delete Button
             IconButton(
                 onClick = onDeleteClick,
-                enabled = layoutInfo.isDeletable
+                enabled = layoutInfo.isDeletable,
+                modifier = Modifier.size(iconButtonSize)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = "Delete Layout",
-                    tint = if (layoutInfo.isDeletable) MaterialTheme.colorScheme.error else Color.Gray.copy(alpha = 0.4f)
+                    tint = if (layoutInfo.isDeletable) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
         }
