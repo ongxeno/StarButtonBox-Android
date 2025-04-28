@@ -372,17 +372,21 @@ class LayoutRepository @Inject constructor(
 
     // --- Default Data ---
 
+    // Default order now only contains the single default layout ID
     private fun getDefaultLayoutOrderIds(): List<String> = listOf(
-        "normal_flight", "freeform_1", "freeform_2", "salvage", "mining", "combat", "demo"
+        "normal_flight"
     )
 
+    // Default definitions now only contain "Normal Flight", set to disabled (hidden)
     private fun getDefaultLayoutDefinitions(): Map<String, LayoutDefinition> = mapOf(
-        "normal_flight" to LayoutDefinition("normal_flight", "Normal Flight", LayoutType.NORMAL_FLIGHT, "Rocket", isDeletable = false),
-        "freeform_1" to LayoutDefinition("freeform_1", "Free Form 1", LayoutType.FREE_FORM, "DashboardCustomize", isDeletable = false),
-        "freeform_2" to LayoutDefinition("freeform_2", "Free Form 2", LayoutType.FREE_FORM, "DashboardCustomize", isDeletable = false),
-        "salvage" to LayoutDefinition("salvage", "Salvage", LayoutType.PLACEHOLDER, "Recycling", isDeletable = false),
-        "mining" to LayoutDefinition("mining", "Mining", LayoutType.PLACEHOLDER, "Diamond", isDeletable = false),
-        "combat" to LayoutDefinition("combat", "Combat", LayoutType.PLACEHOLDER, "LocalFireDepartment", isDeletable = false),
-        "demo" to LayoutDefinition("demo", "Demo", LayoutType.DEMO, "Widgets", isDeletable = false)
+        "normal_flight" to LayoutDefinition(
+            id = "normal_flight",
+            title = "Normal Flight",
+            layoutType = LayoutType.NORMAL_FLIGHT,
+            iconName = "Rocket",
+            isEnabled = false, // Default to hidden
+            isDeletable = false // Cannot delete the default built-in layout
+        )
+        // Removed other default layouts
     )
 }
