@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ongxeno.android.starbuttonbox.ui.dialog.AddLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.screen.ManageLayoutsScreen
@@ -121,6 +123,7 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
     val showSettingsScreen by viewModel.showSettingsScreenState.collectAsStateWithLifecycle()
     val showManageLayoutsScreen by viewModel.showManageLayoutsScreenState.collectAsStateWithLifecycle()
     val showConnectionConfigDialog by viewModel.showConnectionConfigDialogState.collectAsStateWithLifecycle()
+    val showAddLayoutDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle() // Collect state for Add dialog
 
     // --- Main UI Structure: Box allows overlaying Settings/Manage Screens ---
     Box(modifier = Modifier.fillMaxSize()) {
@@ -154,25 +157,34 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
                     // --- Scrollable Row for Tabs (using enabledLayoutsState) ---
                     Row(
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(1f) // Take available space, pushing Add/Settings to the right
                             .horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Iterate through the list of *enabled* LayoutInfo objects
+                        // Existing Layout Tabs
                         enabledLayouts.forEachIndexed { index, layoutInfo ->
                             IconButton(
-                                onClick = { viewModel.selectLayout(index) }, // Use selectLayout
+                                onClick = { viewModel.selectLayout(index) },
                                 modifier = Modifier.size(48.dp),
-                                // Enable button (selectedTabIndexState refers to index in enabled list)
                                 enabled = selectedLayoutIndex >= 0
                             ) {
                                 Icon(
                                     imageVector = layoutInfo.icon,
                                     contentDescription = layoutInfo.title,
-                                    // Tint icon based on selection state
                                     tint = if (selectedLayoutIndex == index) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
                                 )
                             }
+                        }
+                        // Add Layout Button at the end of the tabs
+                        IconButton(
+                            onClick = { viewModel.requestAddLayout() }, // Show AddLayoutDialog
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Add New Layout",
+                                tint = Color.White.copy(alpha = 0.7f) // Consistent tint
+                            )
                         }
                     } // End Scrollable Tabs Row
 
@@ -250,6 +262,14 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
                 onDismissRequest = { ctx -> viewModel.hideConnectionConfigDialog(ctx) },
                 onSave = { ip, port -> viewModel.saveConnectionSettings(ip, port) },
                 networkConfigFlow = viewModel.networkConfigState,
+            )
+        }
+
+        // --- Add Layout Dialog (Overlay) ---
+        if (showAddLayoutDialog) {
+            AddLayoutDialog(
+                onDismissRequest = { viewModel.cancelAddLayout() },
+                onConfirm = { title, iconName -> viewModel.confirmAddLayout(title, iconName) }
             )
         }
 

@@ -178,7 +178,6 @@ class MainViewModel @Inject constructor(
                 if (defaultsAdded) {
                     // If defaults were added, wait for the StateFlows to emit a non-empty list
                     allLayoutsState.filter { it.isNotEmpty() }.first()
-                    enabledLayoutsState.filter { it.isNotEmpty() }.first()
                     Log.d(_tag, "LayoutInfo StateFlows confirmed updated after adding defaults.")
                 } else {
                     // If defaults weren't added, just wait for the first emission (which might be empty if all are disabled)
