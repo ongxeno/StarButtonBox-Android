@@ -1,0 +1,88 @@
+name: Commit Summary (UTC+7)
+
+on:
+  schedule:
+    - cron: '0 1 * * 1' # Runs at 1 AM UTC every Monday
+  workflow_dispatch:
+
+jobs:
+  commit-summary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Ensure full history is available
+
+      - name: Get commit summary (UTC+7, using Author Date)
+        env:
+          TARGET_TZ: 'Asia/Bangkok'
+        run: |
+          # Calculate start and end datetimes in TARGET_TZ for git log
+          start_datetime_for_git=$(TZ=$TARGET_TZ date -d "last monday 00:00:00" --iso-8601=seconds)
+          end_datetime_for_git=$(TZ=$TARGET_TZ date -d "this monday 00:00:00" --iso-8601=seconds)
+
+          # Calculate display dates for the header
+          start_date_display=$(TZ=$TARGET_TZ date -d "last monday" '+%Y-%m-%d %Z')
+          end_date_display=$(TZ=$TARGET_TZ date -d "last sunday" '+%Y-%m-%d %Z')
+
+          # Setup output
+          mkdir -p output
+          commit_log="output/commit_messages.txt"
+
+          # Initialize output file with header
+          echo "Commit Summary from $start_date_display to $end_date_display" > $commit_log
+          echo "" >> $commit_log # Add initial blank line
+
+          # Fetch commits using Author Date
+          git log --since="$start_datetime_for_git" --before="$end_datetime_for_git" --pretty=format:'%H %aI' > commits.txt
+
+          # Read the entire commits.txt into an array
+          mapfile -t commit_lines < commits.txt
+
+          # Check if the array is non-empty
+          if [ ${#commit_lines[@]} -gt 0 ]; then
+            last_date=""
+
+            # Loop through the array elements
+            for line in "${commit_lines[@]}"; do
+              # Skip empty lines if any somehow exist
+              [[ -z "$line" ]] && continue
+
+              sha="${line%% *}"
+              commit_iso_date="${line#* }"
+              commit_date_short=$(echo "$commit_iso_date" | cut -c1-10)
+
+              # Get the commit message
+              commit_msg=$(git show --no-patch --no-notes --pretty=format:'%B' $sha)
+
+              # Group by date
+              if [[ "$last_date" != "$commit_date_short" ]]; then
+                echo "" >> $commit_log # Blank line before new date header
+                echo "=== $commit_date_short ===" >> $commit_log
+                last_date=$commit_date_short
+              fi
+
+              # Check if commit_msg is non-empty
+              if [[ -n "$commit_msg" ]]; then
+                echo "$commit_msg" >> $commit_log
+                echo "" >> $commit_log # Blank line after commit message
+              else
+                 echo "[No commit message]" >> $commit_log
+                 echo "" >> $commit_log # Blank line after placeholder
+              fi
+            done
+          else
+            # If commits.txt was empty
+            echo "No commits found between $start_date_display and $end_date_display." >> $commit_log
+          fi
+
+          # Clean up temporary file
+          rm commits.txt
+
+      - name: Upload commit summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: commit-summary
+          path: ${{ github.workspace }}/output/commit_messages.txt
