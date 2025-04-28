@@ -45,7 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ongxeno.android.starbuttonbox.ui.dialog.AddLayoutDialog
+import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.ui.screen.ManageLayoutsScreen
@@ -123,7 +123,7 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
     val showSettingsScreen by viewModel.showSettingsScreenState.collectAsStateWithLifecycle()
     val showManageLayoutsScreen by viewModel.showManageLayoutsScreenState.collectAsStateWithLifecycle()
     val showConnectionConfigDialog by viewModel.showConnectionConfigDialogState.collectAsStateWithLifecycle()
-    val showAddLayoutDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle() // Collect state for Add dialog
+    val showMainAddLayoutDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
 
     // --- Main UI Structure: Box allows overlaying Settings/Manage Screens ---
     Box(modifier = Modifier.fillMaxSize()) {
@@ -231,7 +231,10 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
             ) {
-                SettingsScreen(viewModel = viewModel)
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { viewModel.hideSettingsScreen() }
+                )
             }
         }
 
@@ -251,10 +254,9 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
             ) {
-                ManageLayoutsScreen(viewModel = viewModel)
+                ManageLayoutsScreen(onNavigateBack = { viewModel.hideManageLayoutsScreen() })
             }
         }
-
 
         // --- Connection Config Dialog (Overlay on top of everything) ---
         if (showConnectionConfigDialog) {
@@ -266,10 +268,13 @@ fun StarCitizenButtonBoxApp(viewModel: MainViewModel) {
         }
 
         // --- Add Layout Dialog (Overlay) ---
-        if (showAddLayoutDialog) {
-            AddLayoutDialog(
-                onDismissRequest = { viewModel.cancelAddLayout() },
-                onConfirm = { title, iconName -> viewModel.confirmAddLayout(title, iconName) }
+        if (showMainAddLayoutDialog) { // Use the state from MainViewModel
+            AddEditLayoutDialog(
+                layoutToEdit = null, // Always adding from here
+                onDismissRequest = { viewModel.cancelAddLayout() }, // Use correct cancel function
+                onConfirm = { title, iconName, _ -> // Ignore existingId
+                    viewModel.confirmAddLayout(title, iconName) // Use correct confirm function
+                }
             )
         }
 

@@ -1,0 +1,287 @@
+package com.ongxeno.android.starbuttonbox.ui.screen // Or ui.manage_layouts
+
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.ongxeno.android.starbuttonbox.MainViewModel // Keep for content lambda type if needed, or remove if mapping done differently
+import com.ongxeno.android.starbuttonbox.data.*
+import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository
+import com.ongxeno.android.starbuttonbox.ui.layout.* // Import layouts for mapping
+import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
+import com.ongxeno.android.starbuttonbox.utils.IconMapper // Use IconMapper
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.util.UUID
+import javax.inject.Inject
+
+@OptIn(ExperimentalCoroutinesApi::class)
+@HiltViewModel
+class ManageLayoutsViewModel @Inject constructor(
+    private val layoutRepository: LayoutRepository,
+    @ApplicationContext private val appContext: Context // Inject context for file ops
+) : ViewModel() {
+
+    private val _tag = "ManageLayoutsVM"
+
+    // --- State Flows for UI ---
+
+    // Flow of all LayoutInfo objects (including disabled) for the management screen
+    // Mapping happens here within the ViewModel scope
+    val allLayoutsState: StateFlow<List<LayoutInfo>> = layoutRepository.allLayoutDefinitionsFlow
+        .map { definitions -> definitions.map { mapDefinitionToInfo(it) } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- Dialog State ---
+    private val _showAddEditLayoutDialog = MutableStateFlow(false)
+    val showAddEditLayoutDialogState: StateFlow<Boolean> = _showAddEditLayoutDialog.asStateFlow()
+    private val _layoutToEditState = mutableStateOf<LayoutInfo?>(null)
+    val layoutToEditState: State<LayoutInfo?> = _layoutToEditState
+
+    private val _showDeleteConfirmationDialog = MutableStateFlow(false)
+    val showDeleteConfirmationDialogState: StateFlow<Boolean> = _showDeleteConfirmationDialog.asStateFlow()
+    private val _layoutToDeleteState = mutableStateOf<LayoutInfo?>(null)
+    val layoutToDeleteState: State<LayoutInfo?> = _layoutToDeleteState
+
+    private val _importResult = MutableStateFlow<ImportResult>(ImportResult.Idle)
+    val importResultState: StateFlow<ImportResult> = _importResult.asStateFlow()
+
+    // --- Export State ---
+    private val _layoutToExportId = MutableStateFlow<String?>(null)
+
+    // JSON parser
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    // --- Event Handlers (Moved from MainViewModel) ---
+
+    /** Saves the new order of layouts. */
+    fun saveLayoutOrder(orderedIds: List<String>) {
+        viewModelScope.launch {
+            layoutRepository.saveLayoutOrder(orderedIds)
+        }
+    }
+
+    /** Toggles the enabled/visible state of a layout. */
+    fun toggleLayoutEnabled(layoutId: String) {
+        viewModelScope.launch {
+            layoutRepository.toggleLayoutEnabled(layoutId)
+            // Note: Index adjustment logic is removed. MainViewModel will react to changes
+            // in enabledLayoutsState and selectedLayoutIndexState from the repository.
+        }
+    }
+
+    /** Initiates the layout deletion process. */
+    fun requestDeleteLayout(layoutInfo: LayoutInfo?) {
+        _layoutToDeleteState.value = layoutInfo
+        if (layoutInfo != null && layoutInfo.isDeletable) { // Check deletable flag here
+            _showDeleteConfirmationDialog.value = true
+        } else if (layoutInfo != null && !layoutInfo.isDeletable) {
+            Log.w(_tag, "Attempted to delete non-deletable layout: ${layoutInfo.id}")
+            // Optionally show a toast via an event flow if needed
+        }
+    }
+
+    /** Confirms the deletion and calls the repository. */
+    fun confirmDeleteLayout() {
+        viewModelScope.launch {
+            _layoutToDeleteState.value?.let { layoutToDelete ->
+                Log.i(_tag, "Confirming deletion of layout: ${layoutToDelete.id}")
+                layoutRepository.deleteLayout(layoutToDelete.id)
+                // Index adjustment is handled by MainViewModel observing repository changes
+            } ?: Log.e(_tag, "Confirm delete called but layoutToDelete was null.")
+            // Reset state regardless
+            _layoutToDeleteState.value = null
+            _showDeleteConfirmationDialog.value = false
+        }
+    }
+
+    /** Cancels the layout deletion process. */
+    fun cancelDeleteLayout() {
+        _layoutToDeleteState.value = null
+        _showDeleteConfirmationDialog.value = false
+    }
+
+    /** Shows the dialog to add a new layout. */
+    fun requestAddLayout() {
+        Log.d(_tag, "Requesting Add Layout Dialog")
+        _layoutToEditState.value = null // Ensure edit state is clear
+        _showAddEditLayoutDialog.value = true
+    }
+
+    /** Shows the dialog to edit an existing layout. */
+    fun requestEditLayout(layoutInfo: LayoutInfo) {
+        if (layoutInfo.type == LayoutType.FREE_FORM) { // Example: Only allow editing FreeForm
+            Log.d(_tag, "Requesting Edit Layout Dialog for ID: ${layoutInfo.id}")
+            _layoutToEditState.value = layoutInfo
+            _showAddEditLayoutDialog.value = true
+        } else {
+            Log.w(_tag, "Edit requested for non-editable layout type: ${layoutInfo.type} for ID: ${layoutInfo.id}")
+            // Optionally show a Toast message via event flow
+        }
+    }
+
+    /** Creates or updates a layout based on user input from the dialog. */
+    fun confirmSaveLayout(title: String, iconName: String, existingId: String?) {
+        viewModelScope.launch {
+            if (existingId == null) {
+                // Add New Layout
+                val newId = "freeform_${UUID.randomUUID()}"
+                val newLayout = LayoutDefinition(
+                    id = newId, title = title, layoutType = LayoutType.FREE_FORM,
+                    iconName = iconName, isEnabled = true, isUserDefined = true,
+                    isDeletable = true, layoutItemsJson = null
+                )
+                layoutRepository.addLayout(newLayout)
+                Log.i(_tag, "Added new layout: $newLayout")
+            } else {
+                // Edit Existing Layout
+                val currentDefinitions = layoutRepository.layoutDefinitionsFlow.first()
+                val definitionToUpdate = currentDefinitions[existingId]
+                if (definitionToUpdate != null) {
+                    val updatedDefinition = definitionToUpdate.copy(title = title, iconName = iconName)
+                    layoutRepository.updateLayoutDefinition(updatedDefinition)
+                    Log.i(_tag, "Updated layout: $updatedDefinition")
+                } else {
+                    Log.e(_tag, "Attempted to edit non-existent layout ID: $existingId")
+                }
+            }
+            _showAddEditLayoutDialog.value = false
+            _layoutToEditState.value = null
+        }
+    }
+
+    /** Cancels the add/edit layout operation. */
+    fun cancelAddEditLayout() {
+        _showAddEditLayoutDialog.value = false
+        _layoutToEditState.value = null
+    }
+
+    /** Dismisses the import result dialog. */
+    fun dismissImportResult() {
+        _importResult.value = ImportResult.Idle
+    }
+
+    // --- Import / Export ---
+    /** Stores the ID of the layout the user wants to export. */
+    fun requestExportLayout(layoutId: String) {
+        Log.d(_tag, "Requesting export for layout ID: $layoutId")
+        _layoutToExportId.value = layoutId
+    }
+
+    /** Clears the stored layout ID after an export attempt. */
+    fun clearExportRequest() {
+        _layoutToExportId.value = null
+    }
+
+    /** Exports the layout identified by the current `_layoutToExportId` state to the given URI. */
+    fun exportLayoutToFile(uri: Uri) {
+        val layoutId = _layoutToExportId.value
+        if (layoutId == null) { /* ... (error handling) ... */ clearExportRequest(); return }
+
+        viewModelScope.launch {
+            Log.d(_tag, "Attempting to export layout '$layoutId' to URI: $uri")
+            val definition = layoutRepository.allLayoutDefinitionsFlow.first().find { it.id == layoutId }
+
+            if (definition == null || definition.layoutType != LayoutType.FREE_FORM) {
+                Log.e(_tag, "Export failed: Layout not found or not FreeForm for ID '$layoutId'")
+                // TODO: Show error message via state
+            } else {
+                val items = layoutRepository.getLayoutItemsFlow(layoutId).first()
+                val exportedData = ExportedLayout(definition = definition, items = items)
+                try {
+                    val jsonString = json.encodeToString(ExportedLayout.serializer(), exportedData)
+                    appContext.contentResolver.openOutputStream(uri)?.use { o -> OutputStreamWriter(o).use { it.write(jsonString) } }
+                    Log.i(_tag, "Successfully exported layout '$layoutId' to $uri")
+                    // TODO: Show success message via state
+                } catch (e: Exception) {
+                    Log.e(_tag, "Export failed for layout '$layoutId' to $uri", e)
+                    // TODO: Show error message via state
+                }
+            }
+            clearExportRequest()
+        }
+    }
+
+    /** Imports a layout from a chosen file URI. */
+    fun importLayoutFromFile(uri: Uri) {
+        viewModelScope.launch {
+            Log.d(_tag, "Attempting to import layout from URI: $uri")
+            _importResult.value = ImportResult.Idle // Reset previous result
+            try {
+                val jsonString = appContext.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    BufferedReader(InputStreamReader(inputStream)).use { reader -> reader.readText() }
+                }
+
+                if (jsonString.isNullOrBlank()) { /* ... (handle empty file) ... */ return@launch }
+                val importedLayout = json.decodeFromString(ExportedLayout.serializer(), jsonString)
+
+                // Validation
+                if (importedLayout.definition.layoutType != LayoutType.FREE_FORM) { /* ... (handle wrong type) ... */ return@launch }
+                if (importedLayout.definition.title.isBlank()) { /* ... (handle blank title) ... */ return@launch }
+                if (IconMapper.getIconVector(importedLayout.definition.iconName) == Icons.AutoMirrored.Filled.HelpOutline && importedLayout.definition.iconName != "HelpOutline") { /* ... (handle invalid icon) ... */ return@launch }
+
+                // Create New Definition
+                val newId = "freeform_${UUID.randomUUID()}"
+                val itemsJson = try { json.encodeToString(ListSerializer(FreeFormItemState.serializer()), importedLayout.items ?: emptyList()) } catch (e: Exception) { null }
+                val newDefinition = importedLayout.definition.copy(
+                    id = newId, isUserDefined = true, isDeletable = true, isEnabled = true,
+                    layoutItemsJson = itemsJson, iconName = importedLayout.definition.iconName
+                )
+
+                layoutRepository.addLayout(newDefinition)
+                Log.i(_tag, "Successfully imported layout '${newDefinition.title}' with new ID '$newId'")
+                _importResult.value = ImportResult.Success(newDefinition, importedLayout.items?.size ?: 0)
+
+            } catch (e: Exception) {
+                Log.e(_tag, "Import failed from $uri", e)
+                _importResult.value = ImportResult.Failure("Import failed: ${e.localizedMessage ?: "Unknown error"}")
+            }
+        }
+    }
+
+    // --- Helper / Mapping Functions (Copied from MainViewModel) ---
+    /** Maps a LayoutDefinition (from Repository) to a LayoutInfo (for UI). Uses IconMapper. */
+    private fun mapDefinitionToInfo(definition: LayoutDefinition): LayoutInfo {
+        return LayoutInfo(
+            id = definition.id,
+            title = definition.title,
+            icon = IconMapper.getIconVector(definition.iconName), // Use mapper
+            type = definition.layoutType,
+            isEnabled = definition.isEnabled,
+            isDeletable = definition.isDeletable,
+            content = mapLayoutTypeToContent(definition.layoutType, definition.id)
+        )
+    }
+
+    /** Maps a layout type and ID to its corresponding content Composable function lambda. */
+    private fun mapLayoutTypeToContent(type: LayoutType, layoutId: String): @Composable (MainViewModel) -> Unit {
+        // This still needs MainViewModel because the Layout composables expect it.
+        // This dependency could be removed if the layout composables were refactored
+        // to take specific state/lambdas instead of the whole MainViewModel.
+        // For now, we keep it, assuming MainViewModel is accessible where LayoutInfo.content is invoked.
+        return when (type) {
+            LayoutType.NORMAL_FLIGHT -> { vm -> NormalFlightLayout(vm) }
+            LayoutType.DEMO -> { vm -> DemoLayout() }
+            LayoutType.FREE_FORM -> { vm -> FreeFormLayout(vm) }
+            LayoutType.PLACEHOLDER -> { vm -> PlaceholderLayout("Layout: $layoutId") }
+        }
+    }
+
+}

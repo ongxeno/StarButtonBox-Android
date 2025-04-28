@@ -27,10 +27,12 @@ import androidx.compose.ui.platform.LocalDensity
 // Removed IntOffset import (not needed for this approach)
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
 import com.ongxeno.android.starbuttonbox.data.ImportResult
 import com.ongxeno.android.starbuttonbox.data.LayoutType
+import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.dialog.ImportResultDialog
 import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
 import kotlin.math.roundToInt
@@ -42,12 +44,17 @@ import kotlin.math.roundToInt
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun ManageLayoutsScreen(viewModel: MainViewModel) {
+fun ManageLayoutsScreen(
+    viewModel: ManageLayoutsViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit
+) {
 
     val layouts by viewModel.allLayoutsState.collectAsStateWithLifecycle()
     val showDeleteDialog by viewModel.showDeleteConfirmationDialogState.collectAsStateWithLifecycle()
     val layoutToDelete by viewModel.layoutToDeleteState
-    val showAddDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
+    // Use combined state for Add/Edit dialog
+    val showAddEditDialog by viewModel.showAddEditLayoutDialogState.collectAsStateWithLifecycle()
+    val layoutToEdit by viewModel.layoutToEditState // Get layout being edited
     val importResult by viewModel.importResultState.collectAsStateWithLifecycle()
     val density = LocalDensity.current.density
 
@@ -145,7 +152,7 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
             TopAppBar(
                 title = { Text("Manage Layouts") },
                 navigationIcon = {
-                    IconButton(onClick = { viewModel.hideManageLayoutsScreen() }) {
+                    IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -214,6 +221,7 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
                         val suggestedName = "${layoutInfo.title.replace(" ", "_")}.json"
                         exportLauncher.launch(suggestedName) // Launch the file creator
                     },
+                    onEditClick = { viewModel.requestEditLayout(layoutInfo) },
                     onDeleteClick = { viewModel.requestDeleteLayout(layoutInfo) },
                     // Pass the conditionally created modifier
                     modifier = itemModifier
@@ -221,11 +229,14 @@ fun ManageLayoutsScreen(viewModel: MainViewModel) {
             }
         }
 
-        // Add Layout Dialog
-        if (showAddDialog) {
-            com.ongxeno.android.starbuttonbox.ui.dialog.AddLayoutDialog(
-                onDismissRequest = { viewModel.cancelAddLayout() },
-                onConfirm = { title, iconName -> viewModel.confirmAddLayout(title, iconName) }
+        // Combined Add/Edit Layout Dialog
+        if (showAddEditDialog) {
+            AddEditLayoutDialog( // Use the renamed dialog
+                layoutToEdit = layoutToEdit, // Pass the layout being edited (null if adding)
+                onDismissRequest = { viewModel.cancelAddEditLayout() }, // Use combined cancel
+                onConfirm = { title, iconName, existingId ->
+                    viewModel.confirmSaveLayout(title, iconName, existingId) // Use combined save
+                }
             )
         }
 
@@ -259,6 +270,7 @@ private fun LayoutListItem(
     dragOffset: Float,
     onToggleVisibilityClick: () -> Unit,
     onExportClick: () -> Unit,
+    onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
     dragHandleModifier: Modifier,
     modifier: Modifier = Modifier
@@ -322,11 +334,23 @@ private fun LayoutListItem(
             Spacer(Modifier.width(8.dp)) // Space before action buttons
 
             // Action Buttons Group (aligned to end)
+            // Edit Button (Only for FreeForm for now)
+            if (layoutInfo.type == LayoutType.FREE_FORM) {
+                IconButton(onClick = onEditClick, modifier = Modifier.size(iconButtonSize)) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = "Edit Layout",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Spacer(Modifier.width(iconButtonSize)) // Reserve space if not editable
+            }
             // Export Button (Conditional)
             if (layoutInfo.type == LayoutType.FREE_FORM) {
                 IconButton(onClick = onExportClick, modifier = Modifier.size(iconButtonSize)) {
                     Icon(
-                        imageVector = Icons.Filled.IosShare,
+                        imageVector = Icons.Filled.Output,
                         contentDescription = "Export Layout",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

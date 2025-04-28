@@ -41,7 +41,10 @@ import com.ongxeno.android.starbuttonbox.MainViewModel
  */
 @OptIn(ExperimentalMaterial3Api::class) // Added OptIn for TopAppBar
 @Composable
-fun SettingsScreen(viewModel: MainViewModel) {
+fun SettingsScreen(
+    viewModel: MainViewModel,
+    onNavigateBack: () -> Unit
+) {
     // Collect necessary state from the ViewModel
     val networkConfig by viewModel.networkConfigState.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOnState.collectAsStateWithLifecycle()
@@ -55,7 +58,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
-                    IconButton(onClick = { viewModel.hideSettingsScreen() }) {
+                    IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
