@@ -19,6 +19,7 @@ lifecycle = "2.8.7"             # Latest stable Lifecycle [17, 18]
 datastore = "1.2.0-alpha01"             # Latest stable Datastore Preferences [19]
 coreKtx = "1.16.0"              # Latest stable Core KTX [21]
 hiltNavigationCompose = "1.2.0" # Latest stable androidx.hilt.navigation [33]
+room = "2.6.1"
 
 # Kotlinx Libraries
 kotlinxSerialization = "1.8.1"  # Latest stable serialization runtime [31]
@@ -45,6 +46,12 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 androidx-animation = { group = "androidx.compose.animation", name = "animation" } # Version managed by BOM
 androidx-compose-material-iconsExtended = { group = "androidx.compose.material", name = "material-icons-extended" } # Version managed by BOM
 
+# Room
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+androidx-room-paging = { group = "androidx.room", name = "room-paging", version.ref = "room" }
+
 # Lifecycle (ViewModel/Compose)
 lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
 lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
@@ -68,6 +75,8 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 # Compose Testing (Managed by BOM)
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" } # Version managed by BOM
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" } # Version managed by BOM
+# Room Testing
+androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
