@@ -5,7 +5,9 @@ import android.os.Build
 import android.os.Vibrator
 import android.os.VibratorManager
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository // Import new Repository
+import com.ongxeno.android.starbuttonbox.datasource.MacroRepository
 import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
+import com.ongxeno.android.starbuttonbox.datasource.room.MacroDao
 // Removed old Datasource imports
 // import com.ongxeno.android.starbuttonbox.datasource.LayoutDatasource
 // import com.ongxeno.android.starbuttonbox.datasource.TabDatasource
@@ -79,9 +81,10 @@ object AppModule { // Renamed from DatasourceModule for clarity if it was separa
     @Singleton
     fun provideLayoutRepository(
         @ApplicationContext context: Context,
-        @ApplicationScope scope: CoroutineScope // Inject the qualified scope
+        @ApplicationScope scope: CoroutineScope, // Inject the qualified scope
+        macroRepository: MacroRepository,
     ): LayoutRepository {
-        return LayoutRepository(context, scope)
+        return LayoutRepository(context, scope, macroRepository)
     }
 
     // Provides Vibrator system service (nullable)

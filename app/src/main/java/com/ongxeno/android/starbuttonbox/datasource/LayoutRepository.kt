@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.LayoutDefinition // Use LayoutDefinition
 import com.ongxeno.android.starbuttonbox.data.LayoutType
+import com.ongxeno.android.starbuttonbox.datasource.room.MacroDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.encodeToString
@@ -38,7 +39,8 @@ private val Context.layoutDataStore: DataStore<Preferences> by preferencesDataSt
 @Singleton
 class LayoutRepository @Inject constructor(
     private val context: Context,
-    private val externalScope: CoroutineScope
+    private val externalScope: CoroutineScope,
+    macroRepository: MacroRepository,
 ) {
 
     private val TAG = "LayoutRepository"

@@ -12,7 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,16 +35,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.*
-import androidx.compose.material.ripple.rememberRipple
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
-import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemType
 import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditButtonDialog
 import com.ongxeno.android.starbuttonbox.utils.ColorUtils
-import com.ongxeno.android.starbuttonbox.utils.ColorUtils.adjustLuminance
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -77,6 +73,8 @@ fun FreeFormLayout(
 ) {
     // Collect the authoritative state from the ViewModel
     val itemsStateFromViewModel by viewModel.currentFreeFormItemsState.collectAsStateWithLifecycle()
+
+    val availableMacros by viewModel.allMacrosState.collectAsState()
 
     // Local mutable state for editing, initialized from ViewModel state
     // This state is modified during drag/resize/add/delete while unlocked
@@ -149,7 +147,7 @@ fun FreeFormLayout(
             // --- Render Layout Items ---
             // *** Render based on the LOCAL editableItemsState ***
             editableItemsState.forEachIndexed { index, itemState -> // Use index for modification
-                val commandIdentifier = itemState.commandString
+                val macroId = itemState.macroId
                 val itemId = itemState.id
 
                 // Calculate BASE Absolute Position in Pixels from LOCAL state
@@ -272,7 +270,7 @@ fun FreeFormLayout(
                                     modifier = Modifier.fillMaxSize(),
                                     text = itemState.text,
                                     enabled = isLocked, // Button enabled only when layout is locked
-                                    onPress = { if (isLocked) viewModel.sendCommand(commandIdentifier, context) },
+                                    onPress = { if (isLocked) viewModel.sendMacro(macroId) },
                                     colors = buttonColors,
                                     textSize = textSize,
                                     shape = RoundedCornerShape(8.dp)
@@ -473,7 +471,8 @@ fun FreeFormLayout(
         showDialog = showAddEditDialog,
         onDismiss = { showAddEditDialog = false },
         initialItemState = editingItemState,
-        onSave = { text, commandString, type, textSizeSp, backgroundColorHex ->
+        availableMacros = availableMacros,
+        onSave = { text, macroId, type, textSizeSp, backgroundColorHex ->
             val currentEditId = editingItemState?.id
             if (currentEditId != null) {
                 // Edit Mode: Update item in LOCAL list
@@ -481,7 +480,7 @@ fun FreeFormLayout(
                 if (index != -1) {
                     val updatedItem = editableItemsState[index].copy(
                         text = text,
-                        commandString = commandString,
+                        macroId = macroId,
                         type = type,
                         textSizeSp = textSizeSp,
                         backgroundColorHex = backgroundColorHex
@@ -494,7 +493,7 @@ fun FreeFormLayout(
                 // Add Mode: Add item to LOCAL list
                 val newItem = FreeFormItemState(
                     text = text,
-                    commandString = commandString,
+                    macroId = macroId,
                     type = type,
                     textSizeSp = textSizeSp,
                     backgroundColorHex = backgroundColorHex

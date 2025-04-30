@@ -3,12 +3,10 @@ package com.ongxeno.android.starbuttonbox.datasource // Or your preferred packag
 import android.util.Log
 // No longer need Command import here
 import com.ongxeno.android.starbuttonbox.data.InputAction
-import com.ongxeno.android.starbuttonbox.data.mapCommandIdentifierToAction // Import the mapper function
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel // Import cancel
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -46,25 +44,10 @@ class UdpSender(
      * mapCommandIdentifierToAction() function and sends it.
      * Logs a warning if no mapping is found for the command identifier.
      *
-     * @param commandIdentifier The unique string identifying the command (e.g., "Flight.Boost").
-     */
-    fun sendCommandAction(commandIdentifier: String) {
-        val inputAction: InputAction? = mapCommandIdentifierToAction(commandIdentifier)
-
-        if (inputAction != null) {
-            sendActionInternal(inputAction, commandIdentifier)
-        } else {
-            Log.w(TAG, "No InputAction mapped for command identifier: $commandIdentifier. Nothing sent.")
-        }
-    }
-
-    /**
-     * Internal function to serialize and send a resolved InputAction via UDP.
-     *
      * @param inputAction The InputAction object to send.
      * @param originalCommandIdentifier The string identifier of the original command for logging.
      */
-    private fun sendActionInternal(inputAction: InputAction, originalCommandIdentifier: String) {
+    fun sendAction(inputAction: InputAction, originalCommandIdentifier: String) {
         // Launch network operation in the sender's scope
         senderScope.launch {
             var socket: DatagramSocket? = null

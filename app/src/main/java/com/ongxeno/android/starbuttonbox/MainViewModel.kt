@@ -1,22 +1,16 @@
 package com.ongxeno.android.starbuttonbox
 
 import android.content.Context
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.filled.* // Import all filled icons
 import androidx.compose.runtime.Composable // Keep this import for the return type
-import androidx.compose.runtime.State
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ongxeno.android.starbuttonbox.data.* // Import data classes
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository // Import new Repository
+import com.ongxeno.android.starbuttonbox.datasource.MacroRepository
 import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.* // Import layout composables
@@ -24,18 +18,16 @@ import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo // Import UI model
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.String
 
 /**
  * ViewModel for the main application screen (MainActivity).
@@ -49,7 +41,7 @@ class MainViewModel @Inject constructor(
     private val settingDatasource: SettingDatasource,
     // Inject the new LayoutRepository
     private val layoutRepository: LayoutRepository,
-    // Inject other dependencies like SoundPlayer, VibratorManagerUtils if needed directly here
+    private val macroRepository: MacroRepository,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -109,6 +101,12 @@ class MainViewModel @Inject constructor(
             else flowOf(emptyList())
         }
         .catch { e -> Log.e(_tag, "Error loading free form items", e); emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // State for ALL macros (used by AddEditButtonDialog)
+    // Filter by a specific game if needed, e.g., Star Citizen
+    val allMacrosState: StateFlow<List<Macro>> = macroRepository.getAllMacros() // Or getMacrosByGameId(Game.STAR_CITIZEN_4_1_1.id)
+        .map { list -> list.map { entity -> entity.toUi() }}
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Initialization ---
@@ -238,19 +236,31 @@ class MainViewModel @Inject constructor(
 
     // Command Sending
     /** Sends a command identifier via UDP if the sender is configured. Shows config dialog otherwise. */
-    fun sendCommand(commandIdentifier: String, contextForToast: Context) {
+    fun sendMacro(macroId: String?) {
         val currentSender = udpSender // Local copy for thread safety
-        if (currentSender != null) {
-            Log.d(_tag, "Sending command: $commandIdentifier via $currentSender")
-            currentSender.sendCommandAction(commandIdentifier) // Use the sender instance
-        } else {
+        if (currentSender == null) {
             // Handle case where settings are missing or invalid
             Log.w(_tag, "SendCommand failed: UdpSender not available (Settings likely missing).")
-            // Show a Toast on the main thread
-            Handler(Looper.getMainLooper()).post {
-                Toast.makeText(contextForToast, "Connection Settings required", Toast.LENGTH_SHORT).show()
-            }
             _showConnectionConfigDialog.value = true // Prompt user to configure connection
+        } else if (macroId == null) {
+            Log.w(_tag,"SendCommand: No Macro ID provided.")
+        } else {
+            CoroutineScope(Dispatchers.IO).launch {
+                val macro = macroRepository.getMacroById(macroId)
+                if (macro == null) {
+                    Log.w(_tag,"SendCommand: Macro with ID '$macroId' not found.")
+                    return@launch
+                }
+
+                val action = macro.effectiveInputAction
+                if (action == null) {
+                    Log.w(_tag,"SendCommand: Macro '${macro.title}' (ID: $macroId) has no effective input action defined.")
+                    return@launch
+                }
+
+                Log.i(_tag, "Sending action: ${macro.title} via $currentSender")
+                currentSender.sendAction(action, macro.title) // Use the sender instance
+            }
         }
     }
 

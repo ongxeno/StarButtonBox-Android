@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ColorLens // Icon for color picker
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,14 +24,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 // Import the custom color picker dialog
-import com.ongxeno.android.starbuttonbox.ui.dialog.CustomColorPickerDialog
-import com.ongxeno.android.starbuttonbox.data.Command
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemType
+import com.ongxeno.android.starbuttonbox.data.Macro
 import com.ongxeno.android.starbuttonbox.utils.ColorUtils
 import com.ongxeno.android.starbuttonbox.utils.ColorUtils.toHexString
 import kotlin.math.abs
@@ -44,18 +41,18 @@ fun AddEditButtonDialog(
     onDismiss: () -> Unit,
     onSave: (
         text: String,
-        commandString: String,
+        macroId: String,
         type: FreeFormItemType,
         textSizeSp: Float?,
         backgroundColorHex: String?
     ) -> Unit,
     initialItemState: FreeFormItemState?,
+    availableMacros: List<Macro>,
     onDelete: (itemId: String) -> Unit
 ) {
     if (!showDialog) return
 
     val isEditMode = initialItemState != null
-    val allCommandIdentifiers = remember { Command.getAllCommandStrings() }
 
     val defaultTextSizeSp = 14f
     val defaultBackgroundColorHex = remember { ColorUtils.DefaultButtonBackground.toHexString() }
@@ -63,15 +60,15 @@ fun AddEditButtonDialog(
     val standardAndDefaultColors = remember { (ColorUtils.StandardColors + defaultBackgroundColorHex).toSet() }
 
     var buttonText by remember(initialItemState?.id) { mutableStateOf(initialItemState?.text ?: "") }
-    var selectedCommandString by remember(initialItemState?.id) {
-        mutableStateOf(initialItemState?.commandString ?: allCommandIdentifiers.firstOrNull() ?: "")
+    var selectedMacroId by remember(initialItemState?.id) {
+        mutableStateOf(initialItemState?.macroId ?: availableMacros.firstOrNull()?.id ?: "")
     }
     var selectedType by remember(initialItemState?.id) {
         mutableStateOf(initialItemState?.type ?: FreeFormItemType.MOMENTARY_BUTTON)
     }
     var commandDropdownExpanded by remember { mutableStateOf(false) }
     var typeDropdownExpanded by remember { mutableStateOf(false) }
-    var isCommandSelected by remember(selectedCommandString) { mutableStateOf(selectedCommandString.isNotEmpty()) }
+    var isCommandSelected by remember(selectedMacroId) { mutableStateOf(selectedMacroId.isNotEmpty()) }
 
     var selectedTextSizeSp by remember(initialItemState?.id) {
         mutableStateOf(initialItemState?.textSizeSp ?: defaultTextSizeSp)
@@ -118,10 +115,10 @@ fun AddEditButtonDialog(
                 OutlinedTextField( /* Button Text */ value = buttonText, onValueChange = { buttonText = it }, label = { Text("Button Label") }, modifier = Modifier.fillMaxWidth(), singleLine = true )
                 Spacer(modifier = Modifier.height(16.dp))
                 ExposedDropdownMenuBox( /* Command Selection */ expanded = commandDropdownExpanded, onExpandedChange = { commandDropdownExpanded = !commandDropdownExpanded }, modifier = Modifier.fillMaxWidth() ) {
-                    OutlinedTextField( value = selectedCommandString.ifEmpty { "Select Command" }, onValueChange = {}, readOnly = true, label = { Text("Command") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = commandDropdownExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth(), isError = !isCommandSelected )
+                    OutlinedTextField( value = selectedMacroId.ifEmpty { "Select Command" }, onValueChange = {}, readOnly = true, label = { Text("Command") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = commandDropdownExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth(), isError = !isCommandSelected )
                     ExposedDropdownMenu( expanded = commandDropdownExpanded, onDismissRequest = { commandDropdownExpanded = false }, modifier = Modifier.heightIn(max = dropdownContentMaxHeight + 32.dp) ) {
                         Column( modifier = Modifier .fillMaxWidth() .height(dropdownContentMaxHeight) .verticalScroll(rememberScrollState()) ) {
-                            allCommandIdentifiers.forEach { commandId -> DropdownMenuItem( text = { Text(commandId, style = MaterialTheme.typography.bodyMedium) }, onClick = { selectedCommandString = commandId; isCommandSelected = true; commandDropdownExpanded = false }, contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding, ) }
+                            availableMacros.forEach { macro -> DropdownMenuItem( text = { Text(macro.title, style = MaterialTheme.typography.bodyMedium) }, onClick = { selectedMacroId = macro.id; isCommandSelected = true; commandDropdownExpanded = false }, contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding, ) }
                         }
                     }
                 }
@@ -232,10 +229,10 @@ fun AddEditButtonDialog(
                     // Save/Add Button
                     Button(
                         onClick = {
-                            if (selectedCommandString.isNotEmpty()) {
+                            if (selectedMacroId.isNotEmpty()) {
                                 onSave(
-                                    buttonText.ifBlank { selectedCommandString },
-                                    selectedCommandString,
+                                    buttonText.ifBlank { availableMacros.firstOrNull { it.id == selectedMacroId }?.label ?: selectedMacroId },
+                                    selectedMacroId,
                                     selectedType,
                                     selectedTextSizeSp.takeIf { it != defaultTextSizeSp },
                                     // Pass hex unless it's the default AND custom wasn't specifically selected
@@ -243,7 +240,7 @@ fun AddEditButtonDialog(
                                 )
                             } else { isCommandSelected = false }
                         },
-                        enabled = selectedCommandString.isNotEmpty()
+                        enabled = selectedMacroId.isNotEmpty()
                     ) { Text(if (isEditMode) "Save" else "Add") }
                 } // End Action Buttons Row
             } // End Main Column

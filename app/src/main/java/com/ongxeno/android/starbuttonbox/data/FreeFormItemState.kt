@@ -35,7 +35,7 @@ data class FreeFormItemState(
     val id: String = UUID.randomUUID().toString(),
     val type: FreeFormItemType = FreeFormItemType.MOMENTARY_BUTTON,
     val text: String = "",
-    val commandString: String,
+    val macroId: String? = null,
     // --- Grid-Based Position and Size ---
     val gridCol: Int = 1,       // Default starting column
     val gridRow: Int = 1,       // Default starting row
