@@ -1,4 +1,4 @@
-package com.ongxeno.android.starbuttonbox.ui.screen // Ensure correct package
+package com.ongxeno.android.starbuttonbox.ui.screen.setting // Ensure correct package
 
 // Import SettingsSection from its location
 import androidx.compose.foundation.layout.Arrangement
@@ -28,10 +28,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
+import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
 
 /**
  * Composable function for the main settings screen.
@@ -42,12 +45,16 @@ import com.ongxeno.android.starbuttonbox.MainViewModel
 @OptIn(ExperimentalMaterial3Api::class) // Added OptIn for TopAppBar
 @Composable
 fun SettingsScreen(
-    viewModel: MainViewModel,
+    viewModel: SettingViewModel = hiltViewModel(),
+    onNavigateToManageLayouts: () -> Unit,
+    onNavigateToManageMacros: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     // Collect necessary state from the ViewModel
     val networkConfig by viewModel.networkConfigState.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOnState.collectAsStateWithLifecycle()
+    val showConnectionDialog by viewModel.showConnectionConfigDialogState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     // Prepare display strings for network config
     val ipDisplay = networkConfig?.ip ?: "Not Set"
@@ -125,7 +132,7 @@ fun SettingsScreen(
             // --- Manage Layout Section ---
             SettingsSection(title = "Manage Layout") {
                 Button(
-                    onClick = { viewModel.showManageLayoutsScreen() },
+                    onClick = onNavigateToManageLayouts,
                     enabled = true
                 ) {
                     Text("Manage Layouts / Tabs")
@@ -137,7 +144,7 @@ fun SettingsScreen(
             // --- Key Binding Section ---
             SettingsSection(title = "Key Binding") {
                 Button(
-                    onClick = { /* TODO: Navigate to Key Binding Screen */ },
+                    onClick = onNavigateToManageMacros,
                     enabled = false
                 ) {
                     Text("Configure Key Bindings (TODO)")
@@ -145,6 +152,14 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp)) // Add some space at the bottom
+        }
+
+        if (showConnectionDialog) {
+            ConnectionConfigDialog(
+                onDismissRequest = { viewModel.hideConnectionConfigDialog(context) },
+                onSave = { ip, port -> viewModel.saveConnectionSettings(ip, port) },
+                networkConfigFlow = viewModel.networkConfigState,
+            )
         }
     }
 }

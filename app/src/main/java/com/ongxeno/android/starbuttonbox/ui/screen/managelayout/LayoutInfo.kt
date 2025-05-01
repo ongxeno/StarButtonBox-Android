@@ -1,8 +1,8 @@
-package com.ongxeno.android.starbuttonbox.ui.model
+package com.ongxeno.android.starbuttonbox.ui.screen.managelayout
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.ongxeno.android.starbuttonbox.MainViewModel // Assuming ViewModel is passed
+import com.ongxeno.android.starbuttonbox.MainViewModel
 import com.ongxeno.android.starbuttonbox.data.LayoutType
 
 /**

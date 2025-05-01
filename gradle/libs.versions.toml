@@ -19,6 +19,7 @@ lifecycle = "2.8.7"             # Latest stable Lifecycle [17, 18]
 datastore = "1.2.0-alpha01"             # Latest stable Datastore Preferences [19]
 coreKtx = "1.16.0"              # Latest stable Core KTX [21]
 hiltNavigationCompose = "1.2.0" # Latest stable androidx.hilt.navigation [33]
+navigationCompose = "2.7.7"
 room = "2.6.1"
 
 # Kotlinx Libraries
@@ -45,6 +46,7 @@ androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" } # Version managed by BOM
 androidx-animation = { group = "androidx.compose.animation", name = "animation" } # Version managed by BOM
 androidx-compose-material-iconsExtended = { group = "androidx.compose.material", name = "material-icons-extended" } # Version managed by BOM
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
 # Room
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.lifecycle.runtime.ktx) // Your original lifecycle runtime
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json) // Your serialization lib
 
     // Compose BOM and UI Components (using your BOM)

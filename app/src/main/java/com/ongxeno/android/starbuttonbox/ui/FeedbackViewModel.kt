@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.annotation.RawRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ongxeno.android.starbuttonbox.R
 import com.ongxeno.android.starbuttonbox.utils.SoundPlayer
 import com.ongxeno.android.starbuttonbox.utils.VibratorManagerUtils // Import VibratorManagerUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,7 +30,12 @@ class FeedbackViewModel @Inject constructor(
     init {
         Log.d(_tag, "FeedbackViewModel Initialized (Vibrator available: ${vibratorManagerUtils.hasVibrator()})") // Check via util method
         // Optional: Preload common sounds on initialization
-        // preloadSounds()
+        preloadSounds(
+            R.raw.snes_press,
+            R.raw.snes_release,
+            R.raw.super8_open,
+            R.raw.super8_close
+        )
     }
 
     // Optional: Function to preload sounds if needed

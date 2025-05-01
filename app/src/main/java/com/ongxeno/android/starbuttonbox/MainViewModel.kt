@@ -14,7 +14,7 @@ import com.ongxeno.android.starbuttonbox.datasource.MacroRepository
 import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
 import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import com.ongxeno.android.starbuttonbox.ui.layout.* // Import layout composables
-import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo // Import UI model
+import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo // Import UI model
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -69,12 +69,8 @@ class MainViewModel @Inject constructor(
 
 
     // --- Screen Visibility State ---
-    private val _showSettingsScreen = MutableStateFlow(false)
-    val showSettingsScreenState: StateFlow<Boolean> = _showSettingsScreen.asStateFlow()
     private val _showConnectionConfigDialog = MutableStateFlow(false)
     val showConnectionConfigDialogState: StateFlow<Boolean> = _showConnectionConfigDialog.asStateFlow()
-    private val _showManageLayoutsScreen = MutableStateFlow(false)
-    val showManageLayoutsScreenState: StateFlow<Boolean> = _showManageLayoutsScreen.asStateFlow()
 
     // --- Add Layout Dialog State (for main screen '+' button) ---
     private val _showAddLayoutDialog = MutableStateFlow(false) // Re-added state
@@ -191,19 +187,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Shows the main settings screen. */
-    fun showSettingsScreen() {
-        Log.d(_tag, "Showing settings screen.")
-        _showSettingsScreen.value = true
-        _showManageLayoutsScreen.value = false // Ensure manage screen is hidden
-    }
-
-    /** Hides the main settings screen. */
-    fun hideSettingsScreen() {
-        Log.d(_tag, "Hiding settings screen.")
-        _showSettingsScreen.value = false
-    }
-
     /** Shows the Connection Configuration Dialog. */
     fun showConnectionConfigDialog() {
         Log.d(_tag, "Showing connection config dialog.")
@@ -271,21 +254,6 @@ class MainViewModel @Inject constructor(
             Log.d(_tag, "Saving selected layout index: $index")
             layoutRepository.saveSelectedLayoutIndex(index)
         }
-    }
-
-    // --- Manage Layouts Screen Events ---
-    /** Shows the Manage Layouts screen and hides the main settings screen. */
-    fun showManageLayoutsScreen() {
-        Log.d(_tag, "Showing Manage Layouts screen.")
-        _showManageLayoutsScreen.value = true
-    }
-
-    /** Hides the Manage Layouts screen. */
-    fun hideManageLayoutsScreen() {
-        Log.d(_tag, "Hiding Manage Layouts screen.")
-        _showManageLayoutsScreen.value = false
-        // Decide whether to automatically go back to the main settings screen
-        // _showSettingsScreen.value = true
     }
 
     // --- Add Layout Events (Triggered from Main Screen) ---

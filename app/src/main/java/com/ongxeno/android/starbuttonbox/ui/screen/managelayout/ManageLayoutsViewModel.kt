@@ -1,22 +1,20 @@
-package com.ongxeno.android.starbuttonbox.ui.screen // Or ui.manage_layouts
+package com.ongxeno.android.starbuttonbox.ui.screen.managelayout // Or ui.manage_layouts
 
 import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ongxeno.android.starbuttonbox.MainViewModel // Keep for content lambda type if needed, or remove if mapping done differently
 import com.ongxeno.android.starbuttonbox.data.*
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository
 import com.ongxeno.android.starbuttonbox.ui.layout.* // Import layouts for mapping
-import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
+import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
 import com.ongxeno.android.starbuttonbox.utils.IconMapper // Use IconMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -24,7 +22,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
 import java.io.InputStreamReader

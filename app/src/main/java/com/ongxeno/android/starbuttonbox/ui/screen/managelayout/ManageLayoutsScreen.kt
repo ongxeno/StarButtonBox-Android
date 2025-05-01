@@ -1,4 +1,4 @@
-package com.ongxeno.android.starbuttonbox.ui.screen
+package com.ongxeno.android.starbuttonbox.ui.screen.managelayout
 
 // Removed AnimationSpec and FiniteAnimationSpec imports as we won't conditionally set the spec anymore
 // Removed snap import
@@ -22,19 +22,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 // Removed IntOffset import (not needed for this approach)
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ongxeno.android.starbuttonbox.MainViewModel
 import com.ongxeno.android.starbuttonbox.data.ImportResult
 import com.ongxeno.android.starbuttonbox.data.LayoutType
 import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditLayoutDialog
+import com.ongxeno.android.starbuttonbox.ui.dialog.DeleteConfirmationDialog
 import com.ongxeno.android.starbuttonbox.ui.dialog.ImportResultDialog
-import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
+import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
 import kotlin.math.roundToInt
 
 /**
@@ -242,7 +241,7 @@ fun ManageLayoutsScreen(
 
         // Delete Confirmation Dialog
         if (showDeleteDialog) {
-            com.ongxeno.android.starbuttonbox.ui.dialog.DeleteConfirmationDialog(
+            DeleteConfirmationDialog(
                 layoutInfo = layoutToDelete,
                 onConfirm = { viewModel.confirmDeleteLayout() },
                 onDismiss = { viewModel.cancelDeleteLayout() }

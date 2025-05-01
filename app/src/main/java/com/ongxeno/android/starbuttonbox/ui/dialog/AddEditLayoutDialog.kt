@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
+import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 
 /**

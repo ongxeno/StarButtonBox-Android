@@ -8,7 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.ongxeno.android.starbuttonbox.ui.model.LayoutInfo
+import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
 
 /**
  * A confirmation dialog displayed before deleting a layout.
