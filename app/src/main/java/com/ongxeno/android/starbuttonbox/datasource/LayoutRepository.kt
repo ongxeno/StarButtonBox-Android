@@ -5,26 +5,29 @@ import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
-import com.ongxeno.android.starbuttonbox.data.LayoutDefinition // Use LayoutDefinition
+import com.ongxeno.android.starbuttonbox.data.LayoutDefinition
 import com.ongxeno.android.starbuttonbox.data.LayoutType
-import com.ongxeno.android.starbuttonbox.datasource.room.MacroDao
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.*
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// Define a single DataStore for all layout-related preferences
 private val Context.layoutDataStore: DataStore<Preferences> by preferencesDataStore(name = "layout_prefs")
 
 /**
@@ -40,7 +43,6 @@ private val Context.layoutDataStore: DataStore<Preferences> by preferencesDataSt
 class LayoutRepository @Inject constructor(
     private val context: Context,
     private val externalScope: CoroutineScope,
-    macroRepository: MacroRepository,
 ) {
 
     private val TAG = "LayoutRepository"
@@ -66,11 +68,10 @@ class LayoutRepository @Inject constructor(
             prefs[PrefKeys.LAYOUT_ORDER_IDS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
         }
         .catch { e ->
-            Log.e(TAG, "Error reading layout order", e); emit(emptyList()) // Emit empty on error too
+            Log.e(TAG, "Error reading layout order", e); emit(emptyList())
         }
 
     /** Flow for the map of layout definitions. Returns empty map if not set. */
-    // Make this public to allow ViewModel to check initial state
     val layoutDefinitionsFlow: Flow<Map<String, LayoutDefinition>> = context.layoutDataStore.data
         .map { prefs ->
             val jsonString = prefs[PrefKeys.LAYOUT_DEFINITIONS]
@@ -82,12 +83,12 @@ class LayoutRepository @Inject constructor(
                     json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), jsonString)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error decoding layout definitions, returning empty map: ${e.message}")
-                    emptyMap() // Return empty map on decoding error
+                    emptyMap()
                 }
             }
         }
         .catch { e ->
-            Log.e(TAG, "Error reading layout definitions", e); emit(emptyMap()) // Emit empty on read error
+            Log.e(TAG, "Error reading layout definitions", e); emit(emptyMap())
         }
 
     /** Flow for the index of the currently selected layout/tab. */
@@ -121,13 +122,13 @@ class LayoutRepository @Inject constructor(
         .stateIn(
             scope = externalScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList() // Start empty
+            initialValue = emptyList()
         )
 
 
     /** Provides a Flow of the FreeForm items for a specific layout ID. */
     fun getLayoutItemsFlow(layoutId: String): Flow<List<FreeFormItemState>> {
-        return layoutDefinitionsFlow // Use the base flow here
+        return layoutDefinitionsFlow
             .mapNotNull { definitionsMap -> definitionsMap[layoutId] }
             .map { definition ->
                 if (definition.layoutType == LayoutType.FREE_FORM && !definition.layoutItemsJson.isNullOrBlank()) {
@@ -168,7 +169,7 @@ class LayoutRepository @Inject constructor(
                 prefs[PrefKeys.LAYOUT_DEFINITIONS] = jsonString
             }
             Log.i(TAG, "Saved layout definitions map.")
-        } catch (e: Exception) { // Catch broader exceptions during serialization/saving
+        } catch (e: Exception) {
             Log.e(TAG, "Error saving layout definitions map", e)
         }
     }
@@ -185,7 +186,6 @@ class LayoutRepository @Inject constructor(
     /** Updates a single layout definition in the stored map. */
     suspend fun updateLayoutDefinition(definition: LayoutDefinition) {
         try {
-            // Use transform which provides atomicity guarantees
             context.layoutDataStore.edit { prefs ->
                 val currentJson = prefs[PrefKeys.LAYOUT_DEFINITIONS]
                 val currentDefinitions = if (currentJson.isNullOrBlank()) {
@@ -366,29 +366,25 @@ class LayoutRepository @Inject constructor(
         Log.i(TAG, "Adding default layouts to DataStore.")
         val defaultDefs = getDefaultLayoutDefinitions()
         val defaultOrder = getDefaultLayoutOrderIds()
-        // Use separate edits for clarity, though one edit block could work
         saveLayoutDefinitions(defaultDefs)
         saveLayoutOrder(defaultOrder)
-        saveSelectedLayoutIndex(0) // Select the first default tab
+        saveSelectedLayoutIndex(0)
     }
 
     // --- Default Data ---
 
-    // Default order now only contains the single default layout ID
     private fun getDefaultLayoutOrderIds(): List<String> = listOf(
         "normal_flight"
     )
 
-    // Default definitions now only contain "Normal Flight", set to disabled (hidden)
     private fun getDefaultLayoutDefinitions(): Map<String, LayoutDefinition> = mapOf(
         "normal_flight" to LayoutDefinition(
             id = "normal_flight",
             title = "Normal Flight",
             layoutType = LayoutType.NORMAL_FLIGHT,
             iconName = "Rocket",
-            isEnabled = false, // Default to hidden
-            isDeletable = false // Cannot delete the default built-in layout
+            isEnabled = false,
+            isDeletable = false
         )
-        // Removed other default layouts
     )
 }
