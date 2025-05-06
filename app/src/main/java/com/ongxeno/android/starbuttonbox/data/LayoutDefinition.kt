@@ -23,6 +23,6 @@ data class LayoutDefinition(
     val iconName: String,
     val isEnabled: Boolean = true,
     val isUserDefined: Boolean = false,
-    val isDeletable: Boolean = !isUserDefined, // Default based on isUserDefined
-    val layoutItemsJson: String? = null // Nullable, only for FREE_FORM
+    val isDeletable: Boolean = !isUserDefined,
+    val layoutItemsJson: String? = null
 )
