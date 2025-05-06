@@ -39,7 +39,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ManageLayoutsViewModel @Inject constructor(
     private val layoutRepository: LayoutRepository,
-    @ApplicationContext private val appContext: Context // Inject context for file ops
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _tag = "ManageLayoutsVM"
@@ -94,19 +94,16 @@ class ManageLayoutsViewModel @Inject constructor(
     fun toggleLayoutEnabled(layoutId: String) {
         viewModelScope.launch {
             layoutRepository.toggleLayoutEnabled(layoutId)
-            // Note: Index adjustment logic is removed. MainViewModel will react to changes
-            // in enabledLayoutsState and selectedLayoutIndexState from the repository.
         }
     }
 
     /** Initiates the layout deletion process. */
     fun requestDeleteLayout(layoutInfo: ManageLayoutInfo?) {
         _layoutToDeleteState.value = layoutInfo
-        if (layoutInfo != null && layoutInfo.isDeletable) { // Check deletable flag here
+        if (layoutInfo != null && layoutInfo.isDeletable) {
             _showDeleteConfirmationDialog.value = true
         } else if (layoutInfo != null && !layoutInfo.isDeletable) {
             Log.w(_tag, "Attempted to delete non-deletable layout: ${layoutInfo.id}")
-            // Optionally show a toast via an event flow if needed
         }
     }
 
@@ -116,9 +113,7 @@ class ManageLayoutsViewModel @Inject constructor(
             _layoutToDeleteState.value?.let { layoutToDelete ->
                 Log.i(_tag, "Confirming deletion of layout: ${layoutToDelete.id}")
                 layoutRepository.deleteLayout(layoutToDelete.id)
-                // Index adjustment is handled by MainViewModel observing repository changes
             } ?: Log.e(_tag, "Confirm delete called but layoutToDelete was null.")
-            // Reset state regardless
             _layoutToDeleteState.value = null
             _showDeleteConfirmationDialog.value = false
         }
@@ -133,19 +128,18 @@ class ManageLayoutsViewModel @Inject constructor(
     /** Shows the dialog to add a new layout. */
     fun requestAddLayout() {
         Log.d(_tag, "Requesting Add Layout Dialog")
-        _layoutToEditState.value = null // Ensure edit state is clear
+        _layoutToEditState.value = null
         _showAddEditLayoutDialog.value = true
     }
 
     /** Shows the dialog to edit an existing layout. */
     fun requestEditLayout(layoutInfo: ManageLayoutInfo) {
-        if (layoutInfo.type == LayoutType.FREE_FORM) { // Example: Only allow editing FreeForm
+        if (layoutInfo.type == LayoutType.FREE_FORM) {
             Log.d(_tag, "Requesting Edit Layout Dialog for ID: ${layoutInfo.id}")
             _layoutToEditState.value = layoutInfo
             _showAddEditLayoutDialog.value = true
         } else {
             Log.w(_tag, "Edit requested for non-editable layout type: ${layoutInfo.type} for ID: ${layoutInfo.id}")
-            // Optionally show a Toast message via event flow
         }
     }
 
@@ -205,7 +199,7 @@ class ManageLayoutsViewModel @Inject constructor(
     /** Exports the layout identified by the current `_layoutToExportId` state to the given URI. */
     fun exportLayoutToFile(uri: Uri) {
         val layoutId = _layoutToExportId.value
-        if (layoutId == null) { /* ... (error handling) ... */ clearExportRequest(); return }
+        if (layoutId == null) { clearExportRequest(); return }
 
         viewModelScope.launch {
             Log.d(_tag, "Attempting to export layout '$layoutId' to URI: $uri")
@@ -235,18 +229,18 @@ class ManageLayoutsViewModel @Inject constructor(
     fun importLayoutFromFile(uri: Uri) {
         viewModelScope.launch {
             Log.d(_tag, "Attempting to import layout from URI: $uri")
-            _importResult.value = ImportResult.Idle // Reset previous result
+            _importResult.value = ImportResult.Idle
             try {
                 val jsonString = appContext.contentResolver.openInputStream(uri)?.use { inputStream ->
                     BufferedReader(InputStreamReader(inputStream)).use { reader -> reader.readText() }
                 }
 
-                if (jsonString.isNullOrBlank()) { /* ... (handle empty file) ... */ return@launch }
+                if (jsonString.isNullOrBlank()) { return@launch }
                 val importedLayout = json.decodeFromString(ExportedLayout.serializer(), jsonString)
 
                 // Validation
-                if (importedLayout.definition.layoutType != LayoutType.FREE_FORM) { /* ... (handle wrong type) ... */ return@launch }
-                if (importedLayout.definition.title.isBlank()) { /* ... (handle blank title) ... */ return@launch }
+                if (importedLayout.definition.layoutType != LayoutType.FREE_FORM) { return@launch }
+                if (importedLayout.definition.title.isBlank()) { return@launch }
                 if (IconMapper.getIconVector(importedLayout.definition.iconName) == Icons.AutoMirrored.Filled.HelpOutline && importedLayout.definition.iconName != "HelpOutline") { /* ... (handle invalid icon) ... */ return@launch }
 
                 // Create New Definition
