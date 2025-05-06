@@ -5,29 +5,39 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.runtime.Composable // Keep this import for the return type
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ongxeno.android.starbuttonbox.data.* // Import data classes
-import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository // Import new Repository
+import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
+import com.ongxeno.android.starbuttonbox.data.LayoutDefinition
+import com.ongxeno.android.starbuttonbox.data.LayoutType
+import com.ongxeno.android.starbuttonbox.data.Macro
+import com.ongxeno.android.starbuttonbox.data.NetworkConfig
+import com.ongxeno.android.starbuttonbox.data.toUi
+import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository
 import com.ongxeno.android.starbuttonbox.datasource.MacroRepository
 import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
-import com.ongxeno.android.starbuttonbox.datasource.UdpSender
-import com.ongxeno.android.starbuttonbox.ui.layout.* // Import layout composables
-import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo // Import UI model
-import com.ongxeno.android.starbuttonbox.utils.IconMapper
+import com.ongxeno.android.starbuttonbox.ui.layout.LayoutInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
-import kotlin.String
 
 /**
  * ViewModel for the main application screen (MainActivity).
@@ -39,10 +49,8 @@ import kotlin.String
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val settingDatasource: SettingDatasource,
-    // Inject the new LayoutRepository
     private val layoutRepository: LayoutRepository,
     private val macroRepository: MacroRepository,
-    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _tag = "MainViewModel"
@@ -60,29 +68,32 @@ class MainViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // Only need the *enabled* layouts for the main UI tabs
-    val enabledLayoutsState: StateFlow<List<LayoutInfo>> = layoutRepository.enabledLayoutDefinitionsFlow
-        .map { definitions -> definitions.map { mapDefinitionToInfo(it) } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Removed allLayoutsState - managed by ManageLayoutsViewModel
-
-
-
-    // --- Screen Visibility State ---
-    private val _showConnectionConfigDialog = MutableStateFlow(false)
-    val showConnectionConfigDialogState: StateFlow<Boolean> = _showConnectionConfigDialog.asStateFlow()
+    val enabledLayoutsState: StateFlow<List<LayoutInfo>> =
+        layoutRepository.enabledLayoutDefinitionsFlow
+            .map { definitions ->
+                definitions.map {
+                    LayoutInfo(
+                        id = it.id,
+                        title = it.title,
+                        iconName = it.iconName,
+                        type = it.layoutType,
+                        isEnabled = it.isEnabled
+                    )
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Add Layout Dialog State (for main screen '+' button) ---
     private val _showAddLayoutDialog = MutableStateFlow(false) // Re-added state
     val showAddLayoutDialogState: StateFlow<Boolean> = _showAddLayoutDialog.asStateFlow()
 
+    private val _showConnectionConfigDialog = MutableStateFlow(false)
+    val showConnectionConfigDialogState: StateFlow<Boolean> =
+        _showConnectionConfigDialog.asStateFlow()
+
     // --- Keep Screen On State ---
     val keepScreenOnState: StateFlow<Boolean> = settingDatasource.keepScreenOnFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    // --- Internal State ---
-    private var udpSender: UdpSender? = null
-    private var udpSenderJob: Job? = null
 
     // --- FreeForm Layout Items State ---
     // Still needed for the currently selected tab's content
@@ -110,6 +121,14 @@ class MainViewModel @Inject constructor(
         Log.d(_tag, "ViewModel initialized")
         observeNetworkConfig()
         initializeAppData() // Keep initialization logic here
+    }
+
+    private fun observeNetworkConfig() {
+        viewModelScope.launch {
+            networkConfigState.collect { config -> // Collect from StateFlow
+                Log.d(_tag, "Network config changed: $config")
+            }
+        }
     }
 
     private fun initializeAppData() {
@@ -140,28 +159,6 @@ class MainViewModel @Inject constructor(
                 Log.d(_tag, "App data initialization complete. Setting isLoading to false.")
                 delay(500)
                 _isLoading.value = false
-            }
-        }
-    }
-
-    /**
-     * Observes network configuration changes and updates the UdpSender.
-     */
-    private fun observeNetworkConfig() {
-        udpSenderJob?.cancel() // Cancel previous job if exists
-        udpSenderJob = viewModelScope.launch {
-            networkConfigState.collect { config -> // Collect from StateFlow
-                Log.d(_tag, "Network config changed: $config")
-                // Create/update UdpSender instance based on config
-                udpSender = config?.let { (ip, port) ->
-                    if (ip != null && port != null) {
-                        Log.i(_tag, "Creating/Updating UdpSender for $ip:$port")
-                        UdpSender(ip, port)
-                    } else {
-                        Log.w(_tag, "Invalid network config, clearing UdpSender.")
-                        null // Set sender to null if config is invalid
-                    }
-                }
             }
         }
     }
@@ -217,36 +214,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Command Sending
-    /** Sends a command identifier via UDP if the sender is configured. Shows config dialog otherwise. */
-    fun sendMacro(macroId: String?) {
-        val currentSender = udpSender // Local copy for thread safety
-        if (currentSender == null) {
-            // Handle case where settings are missing or invalid
-            Log.w(_tag, "SendCommand failed: UdpSender not available (Settings likely missing).")
-            _showConnectionConfigDialog.value = true // Prompt user to configure connection
-        } else if (macroId == null) {
-            Log.w(_tag,"SendCommand: No Macro ID provided.")
-        } else {
-            CoroutineScope(Dispatchers.IO).launch {
-                val macro = macroRepository.getMacroById(macroId)
-                if (macro == null) {
-                    Log.w(_tag,"SendCommand: Macro with ID '$macroId' not found.")
-                    return@launch
-                }
-
-                val action = macro.effectiveInputAction
-                if (action == null) {
-                    Log.w(_tag,"SendCommand: Macro '${macro.title}' (ID: $macroId) has no effective input action defined.")
-                    return@launch
-                }
-
-                Log.i(_tag, "Sending action: ${macro.title} via $currentSender")
-                currentSender.sendAction(action, macro.title) // Use the sender instance
-            }
-        }
-    }
-
     // Layout / Tab Selection
     /** Saves the index of the selected layout (relative to the enabled layouts list). */
     fun selectLayout(index: Int) {
@@ -296,42 +263,5 @@ class MainViewModel @Inject constructor(
                 Log.w(_tag, "Cannot save layout items, selectedLayoutId is null.")
             }
         }
-    }
-
-    // --- Helper / Mapping Functions (Moved from Repository) ---
-
-    /** Maps a LayoutDefinition (from Repository) to a LayoutInfo (for UI). */
-    private fun mapDefinitionToInfo(definition: LayoutDefinition): LayoutInfo {
-        return LayoutInfo(
-            id = definition.id,
-            title = definition.title,
-            icon = IconMapper.getIconVector(definition.iconName), // Map string name back to ImageVector
-            type = definition.layoutType,
-            isEnabled = definition.isEnabled,
-            isDeletable = definition.isDeletable,
-            content = mapLayoutTypeToContent(definition.layoutType, definition.id) // Map ID/Type to the correct Composable lambda
-        )
-    }
-
-    /** Maps a layout type and ID to its corresponding content Composable function lambda. */
-    // No @Composable annotation needed here as it just returns the lambda
-    private fun mapLayoutTypeToContent(type: LayoutType, layoutId: String): @Composable (MainViewModel) -> Unit {
-        // Return the lambda directly. The @Composable context is handled by the caller (e.g., MainActivity)
-        return when (type) {
-            LayoutType.NORMAL_FLIGHT -> { vm -> NormalFlightLayout(vm) }
-            LayoutType.DEMO -> { vm -> DemoLayout() }
-            LayoutType.FREE_FORM -> { vm -> FreeFormLayout(vm) } // FreeFormLayout uses ViewModel's item flow
-            LayoutType.PLACEHOLDER -> { vm -> PlaceholderLayout("Layout: $layoutId") }
-            // Add cases for other specific types if they have unique composables
-        }
-    }
-
-
-    // --- Cleanup ---
-    override fun onCleared() {
-        super.onCleared()
-        udpSenderJob?.cancel() // Cancel the network observer job
-        udpSender?.close() // Close the UDP socket if open
-        Log.d(_tag, "ViewModel cleared.")
     }
 }

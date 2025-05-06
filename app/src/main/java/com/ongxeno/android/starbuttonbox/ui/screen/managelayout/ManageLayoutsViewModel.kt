@@ -5,21 +5,27 @@ import android.net.Uri
 import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ongxeno.android.starbuttonbox.MainViewModel // Keep for content lambda type if needed, or remove if mapping done differently
-import com.ongxeno.android.starbuttonbox.data.*
+import com.ongxeno.android.starbuttonbox.data.ExportedLayout
+import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
+import com.ongxeno.android.starbuttonbox.data.ImportResult
+import com.ongxeno.android.starbuttonbox.data.LayoutDefinition
+import com.ongxeno.android.starbuttonbox.data.LayoutType
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository
-import com.ongxeno.android.starbuttonbox.ui.layout.* // Import layouts for mapping
-import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
-import com.ongxeno.android.starbuttonbox.utils.IconMapper // Use IconMapper
+import com.ongxeno.android.starbuttonbox.utils.IconMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -39,23 +45,32 @@ class ManageLayoutsViewModel @Inject constructor(
     private val _tag = "ManageLayoutsVM"
 
     // --- State Flows for UI ---
-
-    // Flow of all LayoutInfo objects (including disabled) for the management screen
-    // Mapping happens here within the ViewModel scope
-    val allLayoutsState: StateFlow<List<LayoutInfo>> = layoutRepository.allLayoutDefinitionsFlow
-        .map { definitions -> definitions.map { mapDefinitionToInfo(it) } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val manageLayoutsState: StateFlow<List<ManageLayoutInfo>> =
+        layoutRepository.allLayoutDefinitionsFlow
+            .map { definitions ->
+                definitions.map {
+                    ManageLayoutInfo(
+                        id = it.id,
+                        title = it.title,
+                        type = it.layoutType,
+                        iconName = it.iconName,
+                        isEnabled = it.isEnabled,
+                        isDeletable = it.isDeletable
+                    )
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- Dialog State ---
     private val _showAddEditLayoutDialog = MutableStateFlow(false)
     val showAddEditLayoutDialogState: StateFlow<Boolean> = _showAddEditLayoutDialog.asStateFlow()
-    private val _layoutToEditState = mutableStateOf<LayoutInfo?>(null)
-    val layoutToEditState: State<LayoutInfo?> = _layoutToEditState
+    private val _layoutToEditState = mutableStateOf<ManageLayoutInfo?>(null)
+    val layoutToEditState: State<ManageLayoutInfo?> = _layoutToEditState
 
     private val _showDeleteConfirmationDialog = MutableStateFlow(false)
     val showDeleteConfirmationDialogState: StateFlow<Boolean> = _showDeleteConfirmationDialog.asStateFlow()
-    private val _layoutToDeleteState = mutableStateOf<LayoutInfo?>(null)
-    val layoutToDeleteState: State<LayoutInfo?> = _layoutToDeleteState
+    private val _layoutToDeleteState = mutableStateOf<ManageLayoutInfo?>(null)
+    val layoutToDeleteState: State<ManageLayoutInfo?> = _layoutToDeleteState
 
     private val _importResult = MutableStateFlow<ImportResult>(ImportResult.Idle)
     val importResultState: StateFlow<ImportResult> = _importResult.asStateFlow()
@@ -85,7 +100,7 @@ class ManageLayoutsViewModel @Inject constructor(
     }
 
     /** Initiates the layout deletion process. */
-    fun requestDeleteLayout(layoutInfo: LayoutInfo?) {
+    fun requestDeleteLayout(layoutInfo: ManageLayoutInfo?) {
         _layoutToDeleteState.value = layoutInfo
         if (layoutInfo != null && layoutInfo.isDeletable) { // Check deletable flag here
             _showDeleteConfirmationDialog.value = true
@@ -123,7 +138,7 @@ class ManageLayoutsViewModel @Inject constructor(
     }
 
     /** Shows the dialog to edit an existing layout. */
-    fun requestEditLayout(layoutInfo: LayoutInfo) {
+    fun requestEditLayout(layoutInfo: ManageLayoutInfo) {
         if (layoutInfo.type == LayoutType.FREE_FORM) { // Example: Only allow editing FreeForm
             Log.d(_tag, "Requesting Edit Layout Dialog for ID: ${layoutInfo.id}")
             _layoutToEditState.value = layoutInfo
@@ -250,34 +265,6 @@ class ManageLayoutsViewModel @Inject constructor(
                 Log.e(_tag, "Import failed from $uri", e)
                 _importResult.value = ImportResult.Failure("Import failed: ${e.localizedMessage ?: "Unknown error"}")
             }
-        }
-    }
-
-    // --- Helper / Mapping Functions (Copied from MainViewModel) ---
-    /** Maps a LayoutDefinition (from Repository) to a LayoutInfo (for UI). Uses IconMapper. */
-    private fun mapDefinitionToInfo(definition: LayoutDefinition): LayoutInfo {
-        return LayoutInfo(
-            id = definition.id,
-            title = definition.title,
-            icon = IconMapper.getIconVector(definition.iconName), // Use mapper
-            type = definition.layoutType,
-            isEnabled = definition.isEnabled,
-            isDeletable = definition.isDeletable,
-            content = mapLayoutTypeToContent(definition.layoutType, definition.id)
-        )
-    }
-
-    /** Maps a layout type and ID to its corresponding content Composable function lambda. */
-    private fun mapLayoutTypeToContent(type: LayoutType, layoutId: String): @Composable (MainViewModel) -> Unit {
-        // This still needs MainViewModel because the Layout composables expect it.
-        // This dependency could be removed if the layout composables were refactored
-        // to take specific state/lambdas instead of the whole MainViewModel.
-        // For now, we keep it, assuming MainViewModel is accessible where LayoutInfo.content is invoked.
-        return when (type) {
-            LayoutType.NORMAL_FLIGHT -> { vm -> NormalFlightLayout(vm) }
-            LayoutType.DEMO -> { vm -> DemoLayout() }
-            LayoutType.FREE_FORM -> { vm -> FreeFormLayout(vm) }
-            LayoutType.PLACEHOLDER -> { vm -> PlaceholderLayout("Layout: $layoutId") }
         }
     }
 

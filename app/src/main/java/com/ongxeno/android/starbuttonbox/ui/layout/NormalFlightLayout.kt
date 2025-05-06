@@ -1,20 +1,26 @@
 package com.ongxeno.android.starbuttonbox.ui.layout
 
-// Removed Context import if no longer needed by sendMacro
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-// Removed LocalContext import if no longer needed
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ongxeno.android.starbuttonbox.MainViewModel
-// Removed Command import
+import com.ongxeno.android.starbuttonbox.ui.SendMacroViewModel
 import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.button.SafetyButton
 import com.ongxeno.android.starbuttonbox.ui.theme.OrangeDarkPrimary
@@ -41,7 +47,10 @@ private fun ButtonRow(
     content: @Composable RowScope.() -> Unit
 ) {
     Row(
-        modifier = modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp).padding(vertical = verticalSpacing / 2),
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+            .padding(vertical = verticalSpacing / 2),
         horizontalArrangement = horizontalArrangement,
         verticalAlignment = Alignment.CenterVertically,
         content = content
@@ -55,7 +64,7 @@ private fun ButtonRow(
  * @param viewModel The MainViewModel instance, expected to have sendMacro(macroId).
  */
 @Composable
-fun NormalFlightLayout(viewModel: MainViewModel) {
+fun NormalFlightLayout(viewModel: SendMacroViewModel) {
     // Define macro IDs based on the XML names (ensure these match your generated IDs)
     // It's recommended to define these as constants elsewhere for better maintenance
     val macroIdFlightReady = "sc_spaceship_general_v_flightready"
@@ -113,152 +122,252 @@ fun NormalFlightLayout(viewModel: MainViewModel) {
 
         // --- Column 1: Power & Systems ---
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             SectionTitle("POWER")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "FLT RDY", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdFlightReady) })
-                MomentaryButton(text = "POWER", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerToggle) })
+                MomentaryButton(text = "FLT RDY", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdFlightReady) })
+                MomentaryButton(text = "POWER", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerToggle) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "ENGINES", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerEngines) })
+                MomentaryButton(text = "ENGINES", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerEngines) })
             }
             ButtonRow(modifier = Modifier.weight(1f)){
-                MomentaryButton(text = "SHIELDS", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerShields) })
-                MomentaryButton(text = "WEAPONS", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerWeapons) })
+                MomentaryButton(text = "SHIELDS", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerShields) })
+                MomentaryButton(text = "WEAPONS", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerWeapons) })
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Gray)
             SectionTitle("POWER TRIANGLE")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "WEP+", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerIncWep) })
-                MomentaryButton(text = "ENG+", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerIncEng) })
-                MomentaryButton(text = "SHD+", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerIncShd) })
+                MomentaryButton(text = "WEP+", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerIncWep) })
+                MomentaryButton(text = "ENG+", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerIncEng) })
+                MomentaryButton(text = "SHD+", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerIncShd) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "RESET", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerReset) })
+                MomentaryButton(text = "RESET", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdPowerReset) })
                 Spacer(modifier = Modifier.weight(2f))
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Gray)
             SectionTitle("SYSTEMS")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "LIGHTS", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLights) })
+                MomentaryButton(text = "LIGHTS", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLights) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "DOORS", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleDoors) })
-                MomentaryButton(text = "LOCK", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleLock) })
+                MomentaryButton(text = "DOORS", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleDoors) })
+                MomentaryButton(text = "LOCK", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleLock) })
             }
         }
 
         // --- Column 2: Flight & Navigation ---
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             SectionTitle("FLIGHT")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "GEAR", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleGear) })
-                MomentaryButton(text = "VTOL", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleVtol) })
+                MomentaryButton(text = "GEAR", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleGear) })
+                MomentaryButton(text = "VTOL", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleVtol) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "DECOUPLE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleDecouple) })
-                MomentaryButton(text = "CRUISE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleCruise) })
+                MomentaryButton(text = "DECOUPLE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleDecouple) })
+                MomentaryButton(text = "CRUISE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleCruise) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "SPD LMT", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleSpdLmt) })
-                MomentaryButton(text = "ESP", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleEsp) })
+                MomentaryButton(text = "SPD LMT", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleSpdLmt) })
+                MomentaryButton(text = "ESP", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdToggleEsp) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "ATC", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdAtcRequest) })
-                MomentaryButton(text = "DOCK", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdInvokeDock) })
+                MomentaryButton(text = "ATC", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdAtcRequest) })
+                MomentaryButton(text = "DOCK", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdInvokeDock) })
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Gray)
             SectionTitle("NAVIGATION")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "QT MODE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdQtMode) })
-                MomentaryButton(text = "QT ENGAGE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdQtEngage) })
+                MomentaryButton(text = "QT MODE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdQtMode) })
+                MomentaryButton(text = "QT ENGAGE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdQtEngage) })
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Gray)
             SectionTitle("SCANNING")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "SCAN MODE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdScanMode) })
-                MomentaryButton(text = "PING", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdScanPing) })
+                MomentaryButton(text = "SCAN MODE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdScanMode) })
+                MomentaryButton(text = "PING", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdScanPing) })
             }
         }
 
         // --- Column 3: Targeting ---
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             SectionTitle("TARGETING")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "TGT FWD", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetFwd) })
-                MomentaryButton(text = "TGT BCK", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetBack) })
+                MomentaryButton(text = "TGT FWD", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetFwd) })
+                MomentaryButton(text = "TGT BCK", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetBack) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "HOSTILE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetHostile) })
-                MomentaryButton(text = "FRIENDLY", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetFriendly) })
+                MomentaryButton(text = "HOSTILE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetHostile) })
+                MomentaryButton(text = "FRIENDLY", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetFriendly) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "ATTACKER", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetAttacker) })
-                MomentaryButton(text = "ALL", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetAll) })
+                MomentaryButton(text = "ATTACKER", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetAttacker) })
+                MomentaryButton(text = "ALL", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetAll) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "SUB FWD", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetSubFwd) })
-                MomentaryButton(text = "SUB RST", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetSubReset) })
+                MomentaryButton(text = "SUB FWD", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetSubFwd) })
+                MomentaryButton(text = "SUB RST", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetSubReset) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "PIN", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetPin) })
-                MomentaryButton(text = "UNLOCK", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetUnlock) })
+                MomentaryButton(text = "PIN", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetPin) })
+                MomentaryButton(text = "UNLOCK", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdTargetUnlock) })
             }
         }
 
         // --- Column 4: Combat & Emergency ---
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             SectionTitle("COMBAT")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "FIRE W1", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdFireWpn1) })
-                MomentaryButton(text = "FIRE W2", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdFireWpn2) })
+                MomentaryButton(text = "FIRE W1", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdFireWpn1) })
+                MomentaryButton(text = "FIRE W2", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdFireWpn2) })
             }
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "MISSILE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdMissileMode) })
-                MomentaryButton(text = "LAUNCH", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLaunchMissile) })
+                MomentaryButton(text = "MISSILE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdMissileMode) })
+                MomentaryButton(text = "LAUNCH", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLaunchMissile) })
             }
             ButtonRow(modifier = Modifier.weight(1f)){
-                MomentaryButton(text = "CYCLE MSL", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdCycleMissile) })
-                MomentaryButton(text = "CYCLE FIRE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdCycleFireMode) })
+                MomentaryButton(text = "CYCLE MSL", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdCycleMissile) })
+                MomentaryButton(text = "CYCLE FIRE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdCycleFireMode) })
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Gray)
             SectionTitle("COUNTERMEASURES")
             ButtonRow(modifier = Modifier.weight(1f)) {
-                MomentaryButton(text = "DECOY", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLaunchDecoy) })
-                MomentaryButton(text = "NOISE", modifier = Modifier.weight(1f).fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLaunchNoise) })
+                MomentaryButton(text = "DECOY", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLaunchDecoy) })
+                MomentaryButton(text = "NOISE", modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdLaunchNoise) })
             }
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = Color.Gray)
             SectionTitle("EMERGENCY")
             Row(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 SafetyButton(
                     text = "EJECT",
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
                     coverColor = OrangeDarkPrimary,
                     onSafeClick = { viewModel.sendMacro(macroIdEject) } // Pass ID
                 )
                 SafetyButton(
                     text = "S/DEST",
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
                     coverColor = OrangeDarkPrimary,
                     onSafeClick = { viewModel.sendMacro(macroIdSelfDestruct) } // Pass ID
                 )
             }
             ButtonRow(modifier = Modifier.weight(1f)){
-                MomentaryButton(text = "EXIT SEAT", modifier = Modifier.fillMaxWidth().fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdExitSeat)}) // Pass ID
+                MomentaryButton(text = "EXIT SEAT", modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(), onPress = { viewModel.sendMacro(macroIdExitSeat)}) // Pass ID
             }
         }
     }
