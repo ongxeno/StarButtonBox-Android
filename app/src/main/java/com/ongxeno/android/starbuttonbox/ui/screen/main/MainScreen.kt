@@ -34,9 +34,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
+import com.ongxeno.android.starbuttonbox.data.LayoutType
 import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
+import com.ongxeno.android.starbuttonbox.ui.layout.DemoLayout
+import com.ongxeno.android.starbuttonbox.ui.layout.FreeFormLayout
+import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
+import com.ongxeno.android.starbuttonbox.utils.IconMapper
 
 @Composable
 fun MainScreen(
@@ -99,7 +104,7 @@ fun MainScreen(
                                 enabled = selectedLayoutIndex >= 0
                             ) {
                                 Icon(
-                                    imageVector = layoutInfo.icon,
+                                    imageVector = IconMapper.getIconVector(layoutInfo.iconName),
                                     contentDescription = layoutInfo.title,
                                     tint = if (selectedLayoutIndex == index) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
                                 )
@@ -130,19 +135,30 @@ fun MainScreen(
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                 ) {
-                    if (selectedLayoutIndex >= 0 && selectedLayoutIndex < enabledLayouts.size) {
-                        val selectedLayout = enabledLayouts[selectedLayoutIndex]
-                        selectedLayout.content(viewModel)
+                    val layoutInfo =
+                        if (selectedLayoutIndex >= 0 && selectedLayoutIndex < enabledLayouts.size) {
+                            enabledLayouts[selectedLayoutIndex]
                     } else if (enabledLayouts.isNotEmpty()) {
                         LaunchedEffect(enabledLayouts) {
                             viewModel.selectLayout(0)
                         }
-                        enabledLayouts[0].content(viewModel)
+                            enabledLayouts[0]
                     } else {
-                        PlaceholderLayout("No Layouts Enabled")
+                            null
                     }
-                } // End Tab Content Column
-            } // End Main Content Column
+
+                    when (layoutInfo?.type) {
+                        LayoutType.NORMAL_FLIGHT -> NormalFlightLayout(hiltViewModel())
+                        LayoutType.FREE_FORM -> {
+                            FreeFormLayout(viewModel, hiltViewModel())
+                        }
+
+                        LayoutType.DEMO -> DemoLayout()
+                        LayoutType.PLACEHOLDER -> PlaceholderLayout("Layout: ${layoutInfo.id}")
+                        else -> PlaceholderLayout("No Layouts Enabled")
+                    }
+                }
+            }
         }
 
         // --- Connection Config Dialog (Overlay on top of everything) ---

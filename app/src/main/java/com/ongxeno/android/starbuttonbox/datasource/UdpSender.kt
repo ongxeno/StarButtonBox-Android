@@ -26,14 +26,11 @@ class UdpSender(
 ) {
 
     companion object {
-        private const val TAG = "UdpSender" // Tag for logging
+        private const val TAG = "UdpSender"
     }
 
-    // Create a dedicated scope for this sender's operations
-    // Using Dispatchers.IO for network operations
     private val senderScope = CoroutineScope(Dispatchers.IO)
 
-    // Initialize Json instance internally
     private val json = Json {
         prettyPrint = false
         ignoreUnknownKeys = true
@@ -48,7 +45,6 @@ class UdpSender(
      * @param originalCommandIdentifier The string identifier of the original command for logging.
      */
     fun sendAction(inputAction: InputAction, originalCommandIdentifier: String) {
-        // Launch network operation in the sender's scope
         senderScope.launch {
             var socket: DatagramSocket? = null
             val jsonString = try {
@@ -59,7 +55,6 @@ class UdpSender(
             }
 
             try {
-                // Prepare and Send UDP Packet
                 socket = DatagramSocket() // Create socket for sending THIS packet
                 val address: InetAddress = InetAddress.getByName(targetIpAddress)
                 val data: ByteArray = jsonString.toByteArray(Charsets.UTF_8)
@@ -72,7 +67,6 @@ class UdpSender(
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending UDP packet for command '$originalCommandIdentifier'", e)
             } finally {
-                // Ensure the socket created for THIS send operation is closed
                 try {
                     socket?.close()
                     Log.d(TAG, "Socket closed for command '$originalCommandIdentifier'.")

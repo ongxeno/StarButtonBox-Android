@@ -2,20 +2,41 @@ package com.ongxeno.android.starbuttonbox.ui.dialog
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.DashboardCustomize
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
+import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.ManageLayoutInfo
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 
 /**
@@ -27,14 +48,20 @@ import com.ongxeno.android.starbuttonbox.utils.IconMapper
  * @param layoutToEdit Optional LayoutInfo object. If provided, dialog enters 'Edit' mode.
  */
 @Composable
-fun AddEditLayoutDialog( // Renamed Composable
+fun AddEditLayoutDialog(
     onDismissRequest: () -> Unit,
-    onConfirm: (title: String, iconName: String, existingId: String?) -> Unit, // Added existingId
-    layoutToEdit: LayoutInfo? = null // Optional parameter for editing
+    onConfirm: (title: String, iconName: String, existingId: String?) -> Unit,
+    layoutToEdit: ManageLayoutInfo? = null
 ) {
     val isEditMode = layoutToEdit != null
-    var title by remember { mutableStateOf(layoutToEdit?.title ?: "") } // Initialize with existing title if editing
-    var selectedIcon by remember { mutableStateOf(layoutToEdit?.icon ?: Icons.Filled.DashboardCustomize) } // Initialize with existing icon
+    var title by remember { mutableStateOf(layoutToEdit?.title ?: "") }
+    var selectedIcon by remember {
+        mutableStateOf(layoutToEdit?.iconName?.let {
+            IconMapper.getIconVector(
+                it
+            )
+        } ?: Icons.Filled.DashboardCustomize)
+    }
     val isTitleValid by remember(title) { derivedStateOf { title.isNotBlank() } }
 
     val dialogTitle = if (isEditMode) "Edit Layout" else "Add New FreeForm Layout"

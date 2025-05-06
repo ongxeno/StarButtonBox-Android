@@ -1,14 +1,13 @@
 package com.ongxeno.android.starbuttonbox.ui.dialog // Or ui.setting
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.vector.ImageVector
-import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
+import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.ManageLayoutInfo
 
 /**
  * A confirmation dialog displayed before deleting a layout.
@@ -19,7 +18,7 @@ import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.LayoutInfo
  */
 @Composable
 fun DeleteConfirmationDialog(
-    layoutInfo: LayoutInfo?, // Make nullable to handle potential state issues
+    layoutInfo: ManageLayoutInfo?, // Make nullable to handle potential state issues
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {

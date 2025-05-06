@@ -1,8 +1,3 @@
-/*
- * File: StarButtonBox/app/src/main/java/com/ongxeno/android/starbuttonbox/ui/layout/FreeFormLayout.kt
- * Changed save logic: Layout is now saved only when transitioning from unlocked to locked state.
- * Drag/Resize operations update local state for visual feedback but don't save immediately.
- */
 package com.ongxeno.android.starbuttonbox.ui.layout
 
 import android.content.Context
@@ -12,7 +7,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,10 +21,22 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.OpenInFull // Icon for resize handle
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,11 +47,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.times
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemType
+import com.ongxeno.android.starbuttonbox.ui.SendMacroViewModel
 import com.ongxeno.android.starbuttonbox.ui.button.MomentaryButton
 import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditButtonDialog
 import com.ongxeno.android.starbuttonbox.utils.ColorUtils
@@ -69,6 +86,7 @@ private const val TAG_DRAG = "FreeFormDrag"
 @Composable
 fun FreeFormLayout(
     viewModel: MainViewModel,
+    sendMainViewModel: SendMacroViewModel,
     modifier: Modifier = Modifier,
 ) {
     // Collect the authoritative state from the ViewModel
@@ -112,7 +130,7 @@ fun FreeFormLayout(
     var interactingItemId by remember { mutableStateOf<String?>(null) }
     // Removed awaitingStateUpdateAfterInteraction flag
 
-    val context: Context = LocalContext.current.applicationContext
+    LocalContext.current.applicationContext
     val density = LocalDensity.current
     val minTouchTargetSizePx = with(density) { minTouchTargetSizeDp.dp.toPx() }
 
@@ -190,14 +208,21 @@ fun FreeFormLayout(
                         // *** Removed Modifier.offset ***
                         .size(itemWidthDp, itemHeightDp) // Size includes visual resize delta
                         .graphicsLayer { // Apply TOTAL translation (base + visual drag)
-                            val visualOffsetX = if (itemId == interactingItemId) currentDragVisualOffset.x else 0f
-                            val visualOffsetY = if (itemId == interactingItemId) currentDragVisualOffset.y else 0f
+                            val visualOffsetX =
+                                if (itemId == interactingItemId) currentDragVisualOffset.x else 0f
+                            val visualOffsetY =
+                                if (itemId == interactingItemId) currentDragVisualOffset.y else 0f
                             // Combine base position and visual offset
                             translationX = itemBaseAbsoluteX + visualOffsetX
                             translationY = itemBaseAbsoluteY + visualOffsetY
                             // Log.d(TAG_DRAG, "--> Item $itemId: Applying TOTAL graphicsLayer offset: x=${translationX.roundToInt()}, y=${translationY.roundToInt()} (Base: ${itemBaseAbsoluteX.roundToInt()}/${itemBaseAbsoluteY.roundToInt()}, Visual: ${visualOffsetX.roundToInt()}/${visualOffsetY.roundToInt()}, Interacting: ${itemId == interactingItemId})")
                         }
-                        .pointerInput(isLocked, isGridValid, itemId, editableItemsState.size) { // Key on local state size
+                        .pointerInput(
+                            isLocked,
+                            isGridValid,
+                            itemId,
+                            editableItemsState.size
+                        ) { // Key on local state size
                             if (!isLocked && isGridValid) {
                                 detectDragGestures(
                                     onDragStart = { offset ->
@@ -207,38 +232,63 @@ fun FreeFormLayout(
                                         currentResizeVisualDelta = Offset.Zero
                                     },
                                     onDragEnd = {
-                                        Log.d(TAG_DRAG, "Item $itemId: onDragEnd. Final visual offset relative to start: $currentDragVisualOffset")
+                                        Log.d(
+                                            TAG_DRAG,
+                                            "Item $itemId: onDragEnd. Final visual offset relative to start: $currentDragVisualOffset"
+                                        )
                                         // Find the item in the *local* mutable state
-                                        val currentLocalState = editableItemsState.getOrNull(index) ?: run {
-                                            Log.e(TAG_DRAG,"Item $itemId: Cannot find state in local list onDragEnd!")
-                                            interactingItemId = null
-                                            currentDragVisualOffset = Offset.Zero
-                                            return@detectDragGestures
-                                        }
+                                        val currentLocalState =
+                                            editableItemsState.getOrNull(index) ?: run {
+                                                Log.e(
+                                                    TAG_DRAG,
+                                                    "Item $itemId: Cannot find state in local list onDragEnd!"
+                                                )
+                                                interactingItemId = null
+                                                currentDragVisualOffset = Offset.Zero
+                                                return@detectDragGestures
+                                            }
 
                                         // Calculate final position based on OLD base + visual drag offset
-                                        val finalDraggedX = (currentLocalState.gridCol * cellWidthPx) + currentDragVisualOffset.x
-                                        val finalDraggedY = (currentLocalState.gridRow * cellHeightPx) + currentDragVisualOffset.y
+                                        val finalDraggedX =
+                                            (currentLocalState.gridCol * cellWidthPx) + currentDragVisualOffset.x
+                                        val finalDraggedY =
+                                            (currentLocalState.gridRow * cellHeightPx) + currentDragVisualOffset.y
                                         // Snap to grid
                                         val targetCol = (finalDraggedX / cellWidthPx).roundToInt()
                                         val targetRow = (finalDraggedY / cellHeightPx).roundToInt()
                                         // Clamp within grid boundaries
-                                        val clampedCol = targetCol.coerceIn(0, GRID_COLUMNS - currentLocalState.gridWidth)
-                                        val clampedRow = targetRow.coerceIn(0, GRID_ROWS - currentLocalState.gridHeight)
+                                        val clampedCol = targetCol.coerceIn(
+                                            0,
+                                            GRID_COLUMNS - currentLocalState.gridWidth
+                                        )
+                                        val clampedRow = targetRow.coerceIn(
+                                            0,
+                                            GRID_ROWS - currentLocalState.gridHeight
+                                        )
 
-                                        Log.d(TAG_DRAG, "Item $itemId: Drag ended. Target Col/Row: $clampedCol/$clampedRow. Current Col/Row: ${currentLocalState.gridCol}/${currentLocalState.gridRow}")
+                                        Log.d(
+                                            TAG_DRAG,
+                                            "Item $itemId: Drag ended. Target Col/Row: $clampedCol/$clampedRow. Current Col/Row: ${currentLocalState.gridCol}/${currentLocalState.gridRow}"
+                                        )
 
                                         // *** Modify LOCAL state directly ***
-                                        val needsUpdate = currentLocalState.gridCol != clampedCol || currentLocalState.gridRow != clampedRow
+                                        val needsUpdate =
+                                            currentLocalState.gridCol != clampedCol || currentLocalState.gridRow != clampedRow
                                         if (needsUpdate) {
                                             editableItemsState[index] = currentLocalState.copy(
                                                 gridCol = clampedCol,
                                                 gridRow = clampedRow
                                             )
                                             hasUnsavedChanges = true // Mark changes
-                                            Log.d(TAG_DRAG, "Item $itemId: Updated LOCAL position. hasUnsavedChanges = true")
+                                            Log.d(
+                                                TAG_DRAG,
+                                                "Item $itemId: Updated LOCAL position. hasUnsavedChanges = true"
+                                            )
                                         } else {
-                                            Log.d(TAG_DRAG, "Item $itemId: No position change detected.")
+                                            Log.d(
+                                                TAG_DRAG,
+                                                "Item $itemId: No position change detected."
+                                            )
                                         }
 
                                         // *** Reset visual state IMMEDIATELY ***
@@ -270,7 +320,7 @@ fun FreeFormLayout(
                                     modifier = Modifier.fillMaxSize(),
                                     text = itemState.text,
                                     enabled = isLocked, // Button enabled only when layout is locked
-                                    onPress = { if (isLocked) viewModel.sendMacro(macroId) },
+                                    onPress = { if (isLocked) sendMainViewModel.sendMacro(macroId) },
                                     colors = buttonColors,
                                     textSize = textSize,
                                     shape = RoundedCornerShape(8.dp)
@@ -289,48 +339,90 @@ fun FreeFormLayout(
                                     .offset(x = handleTouchOffsetXDp, y = handleTouchOffsetYDp)
                                     .size(minTouchTargetSizeDp.dp)
                                     .clip(CircleShape)
-                                    .pointerInput(Unit, isGridValid, itemId, editableItemsState.size) { // Separate pointerInput for resize
+                                    .pointerInput(
+                                        Unit,
+                                        isGridValid,
+                                        itemId,
+                                        editableItemsState.size
+                                    ) { // Separate pointerInput for resize
                                         if (isGridValid) {
                                             detectDragGestures(
                                                 onDragStart = { offset ->
-                                                    Log.d(TAG_DRAG, "Item $itemId: onResizeStart at $offset")
+                                                    Log.d(
+                                                        TAG_DRAG,
+                                                        "Item $itemId: onResizeStart at $offset"
+                                                    )
                                                     interactingItemId = itemId
                                                     currentDragVisualOffset = Offset.Zero
                                                     currentResizeVisualDelta = Offset.Zero
                                                 },
                                                 onDragEnd = {
-                                                    Log.d(TAG_DRAG, "Item $itemId: onResizeEnd. Final resize delta: $currentResizeVisualDelta")
+                                                    Log.d(
+                                                        TAG_DRAG,
+                                                        "Item $itemId: onResizeEnd. Final resize delta: $currentResizeVisualDelta"
+                                                    )
                                                     // Find the item in the *local* mutable state
-                                                    val currentLocalState = editableItemsState.getOrNull(index) ?: run {
-                                                        Log.e(TAG_DRAG,"Item $itemId: Cannot find state in local list onResizeEnd!")
-                                                        interactingItemId = null
-                                                        currentResizeVisualDelta = Offset.Zero
-                                                        return@detectDragGestures
-                                                    }
+                                                    val currentLocalState =
+                                                        editableItemsState.getOrNull(index) ?: run {
+                                                            Log.e(
+                                                                TAG_DRAG,
+                                                                "Item $itemId: Cannot find state in local list onResizeEnd!"
+                                                            )
+                                                            interactingItemId = null
+                                                            currentResizeVisualDelta = Offset.Zero
+                                                            return@detectDragGestures
+                                                        }
 
                                                     // Calculate final size based on base + visual resize delta
-                                                    val finalResizedWidthPx = (currentLocalState.gridWidth * cellWidthPx) + currentResizeVisualDelta.x
-                                                    val finalResizedHeightPx = (currentLocalState.gridHeight * cellHeightPx) + currentResizeVisualDelta.y
+                                                    val finalResizedWidthPx =
+                                                        (currentLocalState.gridWidth * cellWidthPx) + currentResizeVisualDelta.x
+                                                    val finalResizedHeightPx =
+                                                        (currentLocalState.gridHeight * cellHeightPx) + currentResizeVisualDelta.y
                                                     // Snap to grid cells
-                                                    val targetWidthCells = max(minGridWidth, (finalResizedWidthPx / cellWidthPx).roundToInt())
-                                                    val targetHeightCells = max(minGridHeight, (finalResizedHeightPx / cellHeightPx).roundToInt())
+                                                    val targetWidthCells = max(
+                                                        minGridWidth,
+                                                        (finalResizedWidthPx / cellWidthPx).roundToInt()
+                                                    )
+                                                    val targetHeightCells = max(
+                                                        minGridHeight,
+                                                        (finalResizedHeightPx / cellHeightPx).roundToInt()
+                                                    )
                                                     // Clamp within grid boundaries
-                                                    val clampedWidthCells = targetWidthCells.coerceIn(minGridWidth, GRID_COLUMNS - currentLocalState.gridCol)
-                                                    val clampedHeightCells = targetHeightCells.coerceIn(minGridHeight, GRID_ROWS - currentLocalState.gridRow)
+                                                    val clampedWidthCells =
+                                                        targetWidthCells.coerceIn(
+                                                            minGridWidth,
+                                                            GRID_COLUMNS - currentLocalState.gridCol
+                                                        )
+                                                    val clampedHeightCells =
+                                                        targetHeightCells.coerceIn(
+                                                            minGridHeight,
+                                                            GRID_ROWS - currentLocalState.gridRow
+                                                        )
 
-                                                    Log.d(TAG_DRAG, "Item $itemId: Resize ended. Target W/H Cells: $clampedWidthCells/$clampedHeightCells. Current W/H: ${currentLocalState.gridWidth}/${currentLocalState.gridHeight}")
+                                                    Log.d(
+                                                        TAG_DRAG,
+                                                        "Item $itemId: Resize ended. Target W/H Cells: $clampedWidthCells/$clampedHeightCells. Current W/H: ${currentLocalState.gridWidth}/${currentLocalState.gridHeight}"
+                                                    )
 
                                                     // *** Modify LOCAL state directly ***
-                                                    val needsUpdate = currentLocalState.gridWidth != clampedWidthCells || currentLocalState.gridHeight != clampedHeightCells
-                                                    if(needsUpdate) {
-                                                        editableItemsState[index] = currentLocalState.copy(
-                                                            gridWidth = clampedWidthCells,
-                                                            gridHeight = clampedHeightCells
-                                                        )
+                                                    val needsUpdate =
+                                                        currentLocalState.gridWidth != clampedWidthCells || currentLocalState.gridHeight != clampedHeightCells
+                                                    if (needsUpdate) {
+                                                        editableItemsState[index] =
+                                                            currentLocalState.copy(
+                                                                gridWidth = clampedWidthCells,
+                                                                gridHeight = clampedHeightCells
+                                                            )
                                                         hasUnsavedChanges = true // Mark changes
-                                                        Log.d(TAG_DRAG, "Item $itemId: Updated LOCAL size. hasUnsavedChanges = true")
+                                                        Log.d(
+                                                            TAG_DRAG,
+                                                            "Item $itemId: Updated LOCAL size. hasUnsavedChanges = true"
+                                                        )
                                                     } else {
-                                                        Log.d(TAG_DRAG, "Item $itemId: No size change detected.")
+                                                        Log.d(
+                                                            TAG_DRAG,
+                                                            "Item $itemId: No size change detected."
+                                                        )
                                                     }
 
                                                     // *** Reset visual state IMMEDIATELY ***
@@ -358,8 +450,18 @@ fun FreeFormLayout(
                                         .align(Alignment.Center)
                                         .size(handleVisualSize)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f))
-                                        .border(1.dp, MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha=0.5f), CircleShape)
+                                        .background(
+                                            MaterialTheme.colorScheme.secondaryContainer.copy(
+                                                alpha = 0.9f
+                                            )
+                                        )
+                                        .border(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.onSecondaryContainer.copy(
+                                                alpha = 0.5f
+                                            ),
+                                            CircleShape
+                                        )
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.OpenInFull,
@@ -377,7 +479,9 @@ fun FreeFormLayout(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopStart)
-                                .offset(x = with(density){(-minTouchTargetSizePx / 2).toDp()}, y = with(density){(-minTouchTargetSizePx / 2).toDp()})
+                                .offset(
+                                    x = with(density) { (-minTouchTargetSizePx / 2).toDp() },
+                                    y = with(density) { (-minTouchTargetSizePx / 2).toDp() })
                                 .size(minTouchTargetSizeDp.dp)
                                 .clip(CircleShape)
                                 .clickable(
@@ -394,8 +498,16 @@ fun FreeFormLayout(
                                     .align(Alignment.Center)
                                     .size(handleVisualSize)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f))
-                                    .border(1.dp, MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha=0.5f), CircleShape)
+                                    .background(
+                                        MaterialTheme.colorScheme.secondaryContainer.copy(
+                                            alpha = 0.9f
+                                        )
+                                    )
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
+                                        CircleShape
+                                    )
                             ) {
                                 Icon(
                                     Icons.Filled.Edit,
@@ -412,7 +524,9 @@ fun FreeFormLayout(
 
             // --- Top Right Control Buttons ---
             Row(
-                modifier = Modifier.align(Alignment.TopEnd).padding(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!isLocked) {
@@ -423,7 +537,10 @@ fun FreeFormLayout(
                         },
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f), MaterialTheme.shapes.medium)
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                                MaterialTheme.shapes.medium
+                            )
                     ) {
                         Icon(Icons.Filled.Add, "Add New Button", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }

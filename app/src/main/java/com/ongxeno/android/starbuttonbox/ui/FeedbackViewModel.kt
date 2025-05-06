@@ -19,13 +19,10 @@ import javax.inject.Inject
 @HiltViewModel
 class FeedbackViewModel @Inject constructor(
     private val soundPlayer: SoundPlayer,
-    // Inject the non-nullable VibratorManagerUtils provided by AppModule
     private val vibratorManagerUtils: VibratorManagerUtils
 ) : ViewModel() {
 
     private val _tag = "FeedbackViewModel"
-
-    // Removed internal instantiation of VibratorManagerUtils
 
     init {
         Log.d(_tag, "FeedbackViewModel Initialized (Vibrator available: ${vibratorManagerUtils.hasVibrator()})") // Check via util method

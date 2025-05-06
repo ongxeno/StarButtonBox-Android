@@ -33,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ongxeno.android.starbuttonbox.MainViewModel
 import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
 
 /**
