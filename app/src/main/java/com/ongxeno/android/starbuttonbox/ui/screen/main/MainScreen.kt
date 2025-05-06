@@ -164,6 +164,7 @@ fun MainScreen(
         // --- Connection Config Dialog (Overlay on top of everything) ---
         if (showConnectionConfigDialog) {
             ConnectionConfigDialog(
+                viewModel = hiltViewModel(),
                 onDismissRequest = { ctx -> viewModel.hideConnectionConfigDialog(ctx) },
                 onSave = { ip, port -> viewModel.saveConnectionSettings(ip, port) },
                 networkConfigFlow = viewModel.networkConfigState,

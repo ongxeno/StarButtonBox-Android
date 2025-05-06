@@ -82,9 +82,8 @@ object AppModule { // Renamed from DatasourceModule for clarity if it was separa
     fun provideLayoutRepository(
         @ApplicationContext context: Context,
         @ApplicationScope scope: CoroutineScope, // Inject the qualified scope
-        macroRepository: MacroRepository,
     ): LayoutRepository {
-        return LayoutRepository(context, scope, macroRepository)
+        return LayoutRepository(context, scope)
     }
 
     // Provides Vibrator system service (nullable)

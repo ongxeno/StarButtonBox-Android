@@ -155,6 +155,7 @@ fun SettingsScreen(
 
         if (showConnectionDialog) {
             ConnectionConfigDialog(
+                viewModel = hiltViewModel(),
                 onDismissRequest = { viewModel.hideConnectionConfigDialog(context) },
                 onSave = { ip, port -> viewModel.saveConnectionSettings(ip, port) },
                 networkConfigFlow = viewModel.networkConfigState,
