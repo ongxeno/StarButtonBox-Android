@@ -3,93 +3,73 @@ package com.ongxeno.android.starbuttonbox.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ongxeno.android.starbuttonbox.data.NetworkConfig
+import com.ongxeno.android.starbuttonbox.datasource.ConnectionManager
 import com.ongxeno.android.starbuttonbox.datasource.MacroRepository
-import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
-import com.ongxeno.android.starbuttonbox.datasource.UdpSender
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 @HiltViewModel
 class SendMacroViewModel @Inject constructor(
-    settingDatasource: SettingDatasource,
     private val macroRepository: MacroRepository,
+    private val connectionManager: ConnectionManager, // Inject ConnectionManager
+    private val json: Json // Inject Json for serializing InputAction
 ) : ViewModel() {
 
     private val _tag = "SendMacroViewModel"
 
-    // --- Screen Visibility State ---
-
-    val networkConfigState: StateFlow<NetworkConfig?> = settingDatasource.networkConfigFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    // --- Internal State ---
-    private var udpSender: UdpSender? = null
-    private var udpSenderJob: Job? = null
+    // NetworkConfigState is now managed and observed by ConnectionManager
+    // UdpSender and its job are no longer needed here.
 
     init {
-        observeNetworkConfig()
-    }
-
-    private fun observeNetworkConfig() {
-        udpSenderJob?.cancel()
-        udpSenderJob = viewModelScope.launch {
-            networkConfigState.collect { config ->
-                Log.d(_tag, "Network config changed: $config")
-                udpSender = config?.let { (ip, port) ->
-                    if (ip != null && port != null) {
-                        Log.i(_tag, "Creating/Updating UdpSender for $ip:$port")
-                        UdpSender(ip, port)
-                    } else {
-                        Log.w(_tag, "Invalid network config, clearing UdpSender.")
-                        null
-                    }
-                }
-            }
-        }
+        Log.d(_tag, "ViewModel initialized, ConnectionManager: $connectionManager")
     }
 
     fun sendMacro(macroId: String?) {
-        val currentSender = udpSender
-        if (currentSender == null) {
-            Log.w(_tag, "SendCommand failed: UdpSender not available (Settings likely missing).")
-        } else if (macroId == null) {
-            Log.w(_tag, "SendCommand: No Macro ID provided.")
-        } else {
-            CoroutineScope(Dispatchers.IO).launch {
-                val macro = macroRepository.getMacroById(macroId)
-                if (macro == null) {
-                    Log.w(_tag, "SendCommand: Macro with ID '$macroId' not found.")
-                    return@launch
-                }
+        if (macroId == null) {
+            Log.w(_tag, "SendMacro: No Macro ID provided.")
+            return
+        }
 
-                val action = macro.effectiveInputAction
-                if (action == null) {
-                    Log.w(
-                        _tag,
-                        "SendCommand: Macro '${macro.title}' (ID: $macroId) has no effective input action defined."
-                    )
-                    return@launch
-                }
+        viewModelScope.launch(Dispatchers.IO) { // Perform DB operation off the main thread
+            val macro = macroRepository.getMacroById(macroId)
+            if (macro == null) {
+                Log.w(_tag, "SendMacro: Macro with ID '$macroId' not found.")
+                return@launch
+            }
 
-                Log.i(_tag, "Sending action: ${macro.title} via $currentSender")
-                currentSender.sendAction(action, macro.title) // Use the sender instance
+            val inputAction = macro.effectiveInputAction
+            if (inputAction == null) {
+                Log.w(_tag, "SendMacro: Macro '${macro.title}' (ID: $macroId) has no effective input action defined.")
+                return@launch
+            }
+
+            try {
+                // Serialize the InputAction to JSON string
+                val inputActionJson = json.encodeToString(inputAction)
+
+                // Delegate sending to ConnectionManager
+                // The ConnectionManager will handle wrapping this into a UdpPacket
+                // and managing ACKs.
+                Log.i(_tag, "Requesting to send action for macro: ${macro.title} (ID: $macroId)")
+                connectionManager.sendMacroCommand(inputActionJson, macro.title)
+
+            } catch (e: Exception) {
+                Log.e(_tag, "Error serializing InputAction for macro '${macro.title}': $inputAction", e)
             }
         }
     }
 
+    // onCleared will be handled by Hilt for ConnectionManager if it's a @Singleton.
+    // If ConnectionManager's lifecycle needs to be tied more directly to this ViewModel
+    // (e.g., if ConnectionManager was not a Singleton), you'd call connectionManager.onCleared() here.
+    // Since ConnectionManager is a @Singleton, its onCleared will be called when the app scope ends.
     override fun onCleared() {
         super.onCleared()
-        udpSenderJob?.cancel()
-        udpSender?.close()
-        Log.d(_tag, "ViewModel cleared.")
+        Log.d(_tag, "SendMacroViewModel cleared.")
+        // If ConnectionManager was scoped to this ViewModel:
+        // connectionManager.onCleared()
     }
-
 }
