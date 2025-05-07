@@ -60,6 +60,10 @@ class MainViewModel @Inject constructor(
     val connectionStatus: StateFlow<ConnectionStatus> = connectionManager.connectionStatus
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConnectionStatus.NO_CONFIG)
 
+    // --- New: Expose Latest Response Time from ConnectionManager ---
+    val latestResponseTimeMs: StateFlow<Long?> = connectionManager.latestResponseTimeMs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
 
     // --- State Flows for UI (Layouts, etc.) ---
     val networkConfigState: StateFlow<NetworkConfig?> = settingDatasource.networkConfigFlow

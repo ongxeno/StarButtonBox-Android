@@ -1,19 +1,28 @@
 package com.ongxeno.android.starbuttonbox.ui.screen.main
 
+import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedContent // Import AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween // For animationSpec
 import androidx.compose.animation.fadeIn // Import fadeIn
 import androidx.compose.animation.fadeOut // Import fadeOut
 import androidx.compose.animation.scaleIn // Import scaleIn
 import androidx.compose.animation.scaleOut // Import scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith // Import togetherWith (formerly with)
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,14 +36,13 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CloudOff // For NO_CONFIG or CONNECTION_LOST
-import androidx.compose.material.icons.filled.ErrorOutline // For CONNECTION_LOST
-import androidx.compose.material.icons.filled.HourglassTop // For SENDING_PENDING_ACK
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Wifi // For CONNECTED
-import androidx.compose.material.icons.filled.WifiOff // For NO_CONFIG or CONNECTION_LOST
-import androidx.compose.material.icons.filled.WifiTethering // For CONNECTING
-// import androidx.compose.material.icons.filled.HelpOutline // Default for NO_CONFIG (Removed as WifiOff is clearer)
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,7 +56,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
@@ -73,8 +86,9 @@ fun MainScreen(
     val showConnectionConfigDialog by viewModel.showConnectionConfigDialogState.collectAsStateWithLifecycle()
     val showMainAddLayoutDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
 
-    // Collect connection status from MainViewModel
     val connectionStatus by viewModel.connectionStatus.collectAsStateWithLifecycle()
+    // --- Collect latestResponseTimeMs ---
+    val latestResponseTimeMs by viewModel.latestResponseTimeMs.collectAsStateWithLifecycle()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -84,7 +98,7 @@ fun MainScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background), // Use theme background
+                    .background(MaterialTheme.colorScheme.background),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
@@ -93,30 +107,27 @@ fun MainScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background) // Use theme background
+                    .background(MaterialTheme.colorScheme.background)
             ) {
-                // --- Top Bar: Tabs, Connection Indicator, Add, Settings ---
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) // Use a surface variant
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
                         .height(56.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Scrollable Row for Tabs and Add Layout Button
                     Row(
                         modifier = Modifier
-                            .weight(1f) // Takes available space before ConnectionIndicator and Settings
+                            .weight(1f)
                             .horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Existing Layout Tabs
                         enabledLayouts.forEachIndexed { index, layoutInfo ->
                             IconButton(
                                 onClick = { viewModel.selectLayout(index) },
-                                modifier = Modifier.size(48.dp), // Standard touch target
-                                enabled = selectedLayoutIndex >= 0 // Should always be true if layouts exist
+                                modifier = Modifier.size(48.dp),
+                                enabled = selectedLayoutIndex >= 0
                             ) {
                                 Icon(
                                     imageVector = IconMapper.getIconVector(layoutInfo.iconName),
@@ -125,7 +136,6 @@ fun MainScreen(
                                 )
                             }
                         }
-                        // Add Layout Button - Moved inside the scrollable Row
                         IconButton(
                             onClick = { viewModel.requestAddLayout() },
                             modifier = Modifier.size(48.dp)
@@ -133,16 +143,20 @@ fun MainScreen(
                             Icon(
                                 imageVector = Icons.Filled.Add,
                                 contentDescription = "Add New Layout",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant // Consistent tint
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    } // End Scrollable Tabs Row
+                    }
 
-                    // --- Connection Status Indicator ---
+                    // --- Response Time Indicator ---
+                    ResponseTimeIndicator(
+                        responseTimeMs = latestResponseTimeMs,
+                        connectionStatus = connectionStatus // Pass status to hide when no config/lost
+                    )
+
                     ConnectionStatusIndicator(status = connectionStatus)
-                    // Spacer(modifier = Modifier.width(4.dp)) // Space can be adjusted or removed
+                    // Spacer(modifier = Modifier.width(4.dp)) // Adjusted below
 
-                    // Settings Button
                     IconButton(
                         onClick = navigateToSettings,
                         modifier = Modifier.size(48.dp)
@@ -153,10 +167,9 @@ fun MainScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp)) // Padding at the end if needed
-                } // End Top Bar Row
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
 
-                // Tab Content Area
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -166,41 +179,103 @@ fun MainScreen(
                         if (selectedLayoutIndex >= 0 && selectedLayoutIndex < enabledLayouts.size) {
                             enabledLayouts[selectedLayoutIndex]
                         } else if (enabledLayouts.isNotEmpty()) {
-                            // If selected index is somehow out of bounds but layouts exist, select the first one
                             LaunchedEffect(enabledLayouts) { viewModel.selectLayout(0) }
                             enabledLayouts[0]
-                        } else { null } // No layouts available
+                        } else { null }
 
                     when (layoutInfo?.type) {
                         LayoutType.NORMAL_FLIGHT -> NormalFlightLayout(hiltViewModel())
                         LayoutType.FREE_FORM -> FreeFormLayout(viewModel, hiltViewModel())
                         LayoutType.DEMO -> DemoLayout()
                         LayoutType.PLACEHOLDER -> PlaceholderLayout("Layout: ${layoutInfo.id}")
-                        else -> PlaceholderLayout("No Layouts Enabled") // Or a more welcoming empty state
+                        else -> PlaceholderLayout("No Layouts Enabled")
                     }
                 }
             }
         }
 
-        // Connection Configuration Dialog
         if (showConnectionConfigDialog) {
             ConnectionConfigDialog(
-                viewModel = hiltViewModel(), // Pass SettingViewModel
+                viewModel = hiltViewModel(),
                 onDismissRequest = { ctx -> viewModel.hideConnectionConfigDialog(ctx) },
                 onSave = { ip, port -> viewModel.saveConnectionSettings(ip, port) },
                 networkConfigFlow = viewModel.networkConfigState,
             )
         }
 
-        // Add/Edit Layout Dialog (triggered from MainScreen's add button)
         if (showMainAddLayoutDialog) {
             AddEditLayoutDialog(
-                layoutToEdit = null, // This is for adding a new layout
+                layoutToEdit = null,
                 onDismissRequest = { viewModel.cancelAddLayout() },
-                onConfirm = { title, iconName, _ -> // Existing ID is null for new layouts
+                onConfirm = { title, iconName, _ ->
                     viewModel.confirmAddLayout(title, iconName)
                 }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class) // For AnimatedContent
+@SuppressLint("UnusedContentLambdaTargetStateParameter")
+@Composable
+fun ResponseTimeIndicator(
+    responseTimeMs: Long?,
+    connectionStatus: ConnectionStatus
+) {
+    val tintColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val placeholderText = "--"
+    val unitText = "ms"
+
+    // Determine the text to display for the value and unit
+    val displayValue: String
+    val displayUnit: String
+
+    when {
+        connectionStatus == ConnectionStatus.NO_CONFIG || connectionStatus == ConnectionStatus.CONNECTION_LOST -> {
+            displayValue = placeholderText
+            displayUnit = "" // No unit when placeholder
+        }
+        responseTimeMs != null -> {
+            displayValue = responseTimeMs.toString()
+            displayUnit = unitText
+        }
+        else -> { // CONNECTING or SENDING_PENDING_ACK without a responseTimeMs yet
+            displayValue = placeholderText
+            displayUnit = "" // No unit for placeholder
+        }
+    }
+
+    // Use a key for AnimatedContent that changes when either displayValue or displayUnit changes
+    // This ensures the animation runs if either part of the text content changes.
+    val animationKey = displayValue + displayUnit
+
+    Box(
+        modifier = Modifier
+            .size(width = 56.dp, height = 48.dp) // Similar dimension to IconButton
+            .padding(horizontal = 4.dp), // Some padding
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = displayValue,
+                color = tintColor,
+                fontSize = 14.sp, // Larger size for the number
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center,
+                lineHeight = 16.sp // Adjust if needed
+            )
+            if (displayUnit.isNotEmpty()) {
+                Text(
+                    text = displayUnit,
+                    color = tintColor,
+                    fontSize = 10.sp, // Smaller size for "ms"
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 8.sp // Adjust if needed
+                )
+            }
         }
     }
 }
@@ -235,13 +310,9 @@ fun ConnectionStatusIndicator(status: ConnectionStatus) {
     }
 
     Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-        // Use AnimatedContent to animate icon changes
         AnimatedContent(
-            targetState = icon, // Animate when the icon itself changes
+            targetState = icon,
             transitionSpec = {
-                // Define enter and exit transitions
-                // Example: Fade in new icon, fade out old icon
-                // You can also use scaleIn/scaleOut or slideIn/slideOut
                 (fadeIn(animationSpec = androidx.compose.animation.core.tween(200)) +
                         scaleIn(initialScale = 0.8f, animationSpec = androidx.compose.animation.core.tween(200)))
                     .togetherWith(
@@ -249,11 +320,11 @@ fun ConnectionStatusIndicator(status: ConnectionStatus) {
                                 scaleOut(targetScale = 0.8f, animationSpec = androidx.compose.animation.core.tween(200))
                     )
             },
-            label = "ConnectionStatusIconAnimation" // Label for tooling
-        ) { targetIcon -> // The content lambda receives the target state (the icon)
+            label = "ConnectionStatusIconAnimation"
+        ) { targetIcon ->
             Icon(
                 imageVector = targetIcon,
-                contentDescription = contentDescription, // Content description should ideally also update if icon meaning changes drastically
+                contentDescription = contentDescription,
                 tint = tintColor,
                 modifier = Modifier.size(24.dp)
             )
