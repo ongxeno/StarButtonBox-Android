@@ -23,7 +23,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToLong
 
-private const val HEALTH_CHECK_INTERVAL_MS = 5000L
+private const val HEALTH_CHECK_INTERVAL_MS = 10000L
 private const val PING_TIMEOUT_MS = 2000L
 private const val MACRO_ACK_TIMEOUT_MS = 2000L
 private const val MAX_FAILED_HEALTH_CHECKS = 3
@@ -185,13 +185,21 @@ class ConnectionManager @Inject constructor(
         Log.d(TAG, "Processing packet: ID=${packet.packetId}, Type=${packet.type}")
         when (packet.type) {
             UdpPacketType.HEALTH_CHECK_PONG -> {
-                val sendTime = pendingPings.remove(packet.packetId)
-                if (sendTime != null) {
-                    val rtt = System.currentTimeMillis() - sendTime
-                    _latestResponseTimeMs.value = rtt / 2 // Calculate and update response time
-                    Log.i(TAG, "HEALTH_CHECK_PONG received for ID: ${packet.packetId}. RTT: $rtt ms, ResponseTime: ${rtt/2} ms")
+                val pingSendTime = pendingPings.remove(packet.packetId)
+                if (pingSendTime != null) {
+                    // Calculate one-way latency: PONG's timestamp (server time when PONG was sent) - PING's timestamp (client time when PING was sent)
+                    val oneWayLatency = packet.timestamp - pingSendTime
+                    if (oneWayLatency >= 0) { // Ensure non-negative latency
+                        _latestResponseTimeMs.value = oneWayLatency
+                        Log.i(TAG, "HEALTH_CHECK_PONG received for ID: ${packet.packetId}. Client->Server Latency: $oneWayLatency ms (PONG_ts: ${packet.timestamp}, PING_ts: $pingSendTime)")
+                    } else {
+                        // This case might happen due to clock differences or network quirks.
+                        // Could log as warning or use RTT/2 as a fallback.
+                        // For now, just log and don't update if negative.
+                        Log.w(TAG, "Calculated negative latency for PONG ID ${packet.packetId} ($oneWayLatency ms). PONG_ts: ${packet.timestamp}, PING_ts: $pingSendTime. Not updating response time.")
+                    }
 
-                    _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis()
+                    _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis() // Client's current time
                     _consecutiveFailedHealthChecks.value = 0
                     _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
 
@@ -206,14 +214,21 @@ class ConnectionManager @Inject constructor(
                 }
             }
             UdpPacketType.MACRO_ACK -> {
-                if (pendingMacroAcks.remove(packet.packetId) != null) {
-                    Log.i(TAG, "MACRO_ACK received for ID: ${packet.packetId}")
-                    _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis() // ACK also indicates health
+                // 2. Use MACRO_ACK to calculate response time
+                val commandSendTime = pendingMacroAcks.remove(packet.packetId)
+                if (commandSendTime != null) {
+                    // Calculate one-way latency: ACK's timestamp (server time when ACK was sent) - COMMAND's timestamp (client time when COMMAND was sent)
+                    val oneWayLatency = packet.timestamp - commandSendTime
+                    if (oneWayLatency >= 0) {
+                        _latestResponseTimeMs.value = oneWayLatency // Update with this more recent measurement
+                        Log.i(TAG, "MACRO_ACK received for ID: ${packet.packetId}. Client->Server Latency (ACK): $oneWayLatency ms (ACK_ts: ${packet.timestamp}, CMD_ts: $commandSendTime)")
+                    } else {
+                        Log.w(TAG, "Calculated negative latency for ACK ID ${packet.packetId} ($oneWayLatency ms). ACK_ts: ${packet.timestamp}, CMD_ts: $commandSendTime. Not updating response time.")
+                    }
+
+                    _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis()
                     _consecutiveFailedHealthChecks.value = 0
                     _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
-                    // If an ACK is received, it implies the connection is good at this moment.
-                    // Update response time if this ACK also corresponds to a PING (though unlikely, PONG is primary for RTT)
-                    // For simplicity, we primarily use PONG for RTT. An ACK confirms command delivery.
 
                     if (pendingMacroAcks.isEmpty()) {
                         if (_connectionStatus.value == ConnectionStatus.SENDING_PENDING_ACK || _connectionStatus.value == ConnectionStatus.CONNECTING) {
@@ -364,7 +379,8 @@ class ConnectionManager @Inject constructor(
 
         val commandPacket = UdpPacket(
             type = UdpPacketType.MACRO_COMMAND,
-            payload = inputActionJson
+            payload = inputActionJson,
+            timestamp = System.currentTimeMillis() // Client's send time for the command
         )
         val packetId = commandPacket.packetId
         val sendTime = commandPacket.timestamp
