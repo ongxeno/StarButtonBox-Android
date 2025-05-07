@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.ongxeno.android.starbuttonbox.datasource.ConnectionManager
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository // Import new Repository
 import com.ongxeno.android.starbuttonbox.datasource.MacroRepository
 import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
@@ -20,6 +21,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.serialization.json.Json
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -106,6 +108,18 @@ object AppModule { // Renamed from DatasourceModule for clarity if it was separa
         return VibratorManagerUtils(vibrator)
     }
 
-    // Note: SoundPlayer is likely injected directly via @Inject constructor
-    // Note: UdpSender is managed within the ViewModel based on network config flow
+    /**
+     * Provides the singleton instance of ConnectionManager.
+     * Depends on ApplicationContext, SettingDatasource, Json, and ApplicationScope.
+     */
+    @Provides
+    @Singleton
+    fun provideConnectionManager(
+        @ApplicationContext context: Context,
+        settingDatasource: SettingDatasource,
+        json: Json, // Hilt will get this from DatabaseModule
+        @ApplicationScope appScope: CoroutineScope
+    ): ConnectionManager {
+        return ConnectionManager(context, settingDatasource, json, appScope)
+    }
 }
