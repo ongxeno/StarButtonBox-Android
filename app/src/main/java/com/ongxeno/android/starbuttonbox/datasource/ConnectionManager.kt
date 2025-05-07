@@ -17,21 +17,24 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketException
 import java.net.SocketTimeoutException
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val HEALTH_CHECK_INTERVAL_MS = 5000L // 5 seconds
-private const val PING_TIMEOUT_MS = 2000L // 2 seconds
+private const val HEALTH_CHECK_INTERVAL_MS = 5000L
+private const val PING_TIMEOUT_MS = 2000L
+private const val MACRO_ACK_TIMEOUT_MS = 2000L // Timeout for macro acknowledgements
 private const val MAX_FAILED_HEALTH_CHECKS = 3
-private const val MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED = 2
-private const val UDP_RECEIVE_BUFFER_SIZE = 2048 // Increased buffer for UdpPacket JSON
+private const val MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED = 2 // Still used for PONG-based connection
+private const val UDP_RECEIVE_BUFFER_SIZE = 2048
 
 @Singleton
 class ConnectionManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingDatasource: SettingDatasource,
     private val json: Json,
-    @ApplicationScope private val appScope: CoroutineScope // Use application-level scope
+    @ApplicationScope private val appScope: CoroutineScope
 ) {
     private val TAG = "ConnectionManager"
 
@@ -39,35 +42,37 @@ class ConnectionManager @Inject constructor(
     private var listenerJob: Job? = null
     private var healthCheckJob: Job? = null
     private var pingTimeoutJob: Job? = null
+    private var ackTimeoutJob: Job? = null
 
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NO_CONFIG)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
     private var currentNetworkConfig: NetworkConfig? = null
 
-    // Tracking for health checks
     private val _lastSuccessfulHealthCheckTime = MutableStateFlow<Long?>(null)
-    // val lastSuccessfulHealthCheckTime: StateFlow<Long?> = _lastSuccessfulHealthCheckTime.asStateFlow()
-
     private val _consecutiveSuccessfulHealthChecks = MutableStateFlow(0)
     private val _consecutiveFailedHealthChecks = MutableStateFlow(0)
 
-    // Map to store packetId and send timestamp of PINGs awaiting PONGs
-    private val pendingPings = mutableMapOf<String, Long>()
+    private val pendingPings = ConcurrentHashMap<String, Long>()
+    private val pendingMacroAcks = ConcurrentHashMap<String, Long>()
 
     init {
         Log.d(TAG, "Initializing ConnectionManager.")
-        // Observe network configuration changes
         appScope.launch {
             settingDatasource.networkConfigFlow.collectLatest { config ->
                 Log.d(TAG, "Network config updated: $config")
+                val oldConfig = currentNetworkConfig
                 currentNetworkConfig = config
+
                 if (config?.ip != null && config.port != null) {
-                    if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
-                        Log.i(TAG, "Valid network config found. Current status: ${_connectionStatus.value}. Transitioning to CONNECTING.")
+                    if (oldConfig?.ip != config.ip || oldConfig?.port != config.port || udpSocket == null || udpSocket!!.isClosed) {
+                        Log.i(TAG, "Network config changed or socket not ready. Restarting connection components.")
+                        _connectionStatus.value = ConnectionStatus.CONNECTING
+                        restartSocketAndJobs()
+                    } else if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
+                        Log.i(TAG, "Valid network config present, attempting to connect/reconnect. Status -> CONNECTING")
                         _connectionStatus.value = ConnectionStatus.CONNECTING
                     }
-                    restartSocketAndJobs() // Restart with new config
                 } else {
                     Log.w(TAG, "Invalid or missing network config. Setting status to NO_CONFIG.")
                     _connectionStatus.value = ConnectionStatus.NO_CONFIG
@@ -78,8 +83,8 @@ class ConnectionManager @Inject constructor(
     }
 
     private fun restartSocketAndJobs() {
-        Log.d(TAG, "Restarting socket and jobs...")
-        stopSocketAndJobs() // Ensure previous instances are closed
+        Log.d(TAG, "Restarting socket and all jobs...")
+        stopSocketAndJobs()
 
         val config = currentNetworkConfig
         if (config?.ip == null || config.port == null) {
@@ -89,42 +94,40 @@ class ConnectionManager @Inject constructor(
         }
 
         try {
-            // Initialize and bind the UDP socket for sending and receiving
-            // Binding to port 0 lets the OS pick an available ephemeral port
-            udpSocket = DatagramSocket() // Let OS pick a port for sending
+            udpSocket = DatagramSocket()
             Log.i(TAG, "UDP Socket created and bound to local port: ${udpSocket?.localPort}")
 
-            // Start the listener for incoming packets (PONGs, ACKs)
             startListener()
-            // Start periodic health checks
             startHealthChecks()
-            // Start job to check for PING timeouts
             startPingTimeoutChecker()
+            startAckTimeoutChecker()
 
-            // Initial status if config is present
-            if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
+            if (_connectionStatus.value != ConnectionStatus.CONNECTING && _connectionStatus.value != ConnectionStatus.SENDING_PENDING_ACK) {
                 _connectionStatus.value = ConnectionStatus.CONNECTING
             }
-
         } catch (e: SocketException) {
             Log.e(TAG, "Error creating UDP socket: ${e.message}", e)
-            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST // Or a specific error state
+            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
             stopSocketAndJobs()
         }
     }
 
     private fun stopSocketAndJobs() {
-        Log.d(TAG, "Stopping socket and jobs...")
+        Log.d(TAG, "Stopping socket and all jobs...")
         listenerJob?.cancel()
         healthCheckJob?.cancel()
         pingTimeoutJob?.cancel()
+        ackTimeoutJob?.cancel()
         listenerJob = null
         healthCheckJob = null
         pingTimeoutJob = null
+        ackTimeoutJob = null
 
         pendingPings.clear()
+        pendingMacroAcks.clear()
         _consecutiveFailedHealthChecks.value = 0
         _consecutiveSuccessfulHealthChecks.value = 0
+        _lastSuccessfulHealthCheckTime.value = null
 
         try {
             udpSocket?.close()
@@ -137,21 +140,16 @@ class ConnectionManager @Inject constructor(
 
     private fun startListener() {
         val socket = udpSocket ?: return
-        if (listenerJob?.isActive == true) {
-            Log.d(TAG, "Listener job already active.")
-            return
-        }
+        if (listenerJob?.isActive == true) return
         Log.d(TAG, "Starting UDP listener job.")
         listenerJob = appScope.launch(Dispatchers.IO) {
             val buffer = ByteArray(UDP_RECEIVE_BUFFER_SIZE)
             while (isActive) {
                 try {
                     val datagramPacket = DatagramPacket(buffer, buffer.size)
-                    socket.receive(datagramPacket) // Blocking call
-
+                    socket.receive(datagramPacket)
                     val jsonData = String(datagramPacket.data, 0, datagramPacket.length)
                     Log.v(TAG, "Received UDP packet: $jsonData from ${datagramPacket.address.hostAddress}:${datagramPacket.port}")
-
                     try {
                         val receivedPacket = json.decodeFromString<UdpPacket>(jsonData)
                         processReceivedPacket(receivedPacket)
@@ -159,17 +157,12 @@ class ConnectionManager @Inject constructor(
                         Log.e(TAG, "Error parsing received UDP packet: $jsonData", e)
                     }
                 } catch (e: SocketTimeoutException) {
-                    // Expected if socket has a timeout, can be ignored or used for keep-alive logic
                     Log.v(TAG, "Socket receive timeout.")
                 } catch (e: SocketException) {
-                    if (isActive) { // Only log if not intentionally closing
-                        Log.e(TAG, "SocketException in listener (socket likely closed): ${e.message}")
-                    }
-                    break // Exit loop if socket is closed
+                    if (isActive) Log.e(TAG, "SocketException in listener: ${e.message}")
+                    break
                 } catch (e: Exception) {
-                    if (isActive) {
-                        Log.e(TAG, "Error in UDP listener: ${e.message}", e)
-                    }
+                    if (isActive) Log.e(TAG, "Error in UDP listener: ${e.message}", e)
                 }
             }
             Log.d(TAG, "UDP listener job ended.")
@@ -180,58 +173,68 @@ class ConnectionManager @Inject constructor(
         Log.d(TAG, "Processing packet: ID=${packet.packetId}, Type=${packet.type}")
         when (packet.type) {
             UdpPacketType.HEALTH_CHECK_PONG -> {
-                synchronized(pendingPings) {
-                    if (pendingPings.containsKey(packet.packetId)) {
-                        pendingPings.remove(packet.packetId)
-                        Log.i(TAG, "HEALTH_CHECK_PONG received for ID: ${packet.packetId}")
-                        _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis()
-                        _consecutiveFailedHealthChecks.value = 0
-                        _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
+                if (pendingPings.remove(packet.packetId) != null) {
+                    Log.i(TAG, "HEALTH_CHECK_PONG received for ID: ${packet.packetId}")
+                    _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis()
+                    _consecutiveFailedHealthChecks.value = 0
+                    _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
 
-                        if (_consecutiveSuccessfulHealthChecks.value >= MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED &&
-                            _connectionStatus.value != ConnectionStatus.CONNECTED &&
-                            _connectionStatus.value != ConnectionStatus.SENDING_PENDING_ACK) { // Don't switch if sending
-                            Log.i(TAG, "Connection established (PONG received). Status -> CONNECTED")
-                            _connectionStatus.value = ConnectionStatus.CONNECTED
-                        }
-                    } else {
-                        Log.w(TAG, "Received PONG for unknown or timed-out PING ID: ${packet.packetId}")
+                    // Transition to CONNECTED if enough PONGs received and not currently sending a macro
+                    if (_consecutiveSuccessfulHealthChecks.value >= MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED &&
+                        _connectionStatus.value != ConnectionStatus.CONNECTED &&
+                        _connectionStatus.value != ConnectionStatus.SENDING_PENDING_ACK) {
+                        Log.i(TAG, "Connection established (PONG received). Status -> CONNECTED")
+                        _connectionStatus.value = ConnectionStatus.CONNECTED
                     }
+                } else {
+                    Log.w(TAG, "Received PONG for unknown or timed-out PING ID: ${packet.packetId}")
                 }
             }
             UdpPacketType.MACRO_ACK -> {
-                // To be implemented in Phase 3
-                Log.d(TAG, "MACRO_ACK received (Phase 3): ID=${packet.packetId}")
+                if (pendingMacroAcks.remove(packet.packetId) != null) {
+                    Log.i(TAG, "MACRO_ACK received for ID: ${packet.packetId}")
+                    // A successful ACK implies the server is responsive.
+                    _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis()
+                    _consecutiveFailedHealthChecks.value = 0
+                    // Consider an ACK as a strong sign of health, can contribute to successful checks count
+                    _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
+
+
+                    if (pendingMacroAcks.isEmpty()) {
+                        // If all ACKs are received, and we were either sending or trying to connect,
+                        // consider the connection restored.
+                        if (_connectionStatus.value == ConnectionStatus.SENDING_PENDING_ACK || _connectionStatus.value == ConnectionStatus.CONNECTING) {
+                            Log.i(TAG, "All MACRO_ACKs received or single ACK restored connection. Status -> CONNECTED")
+                            _connectionStatus.value = ConnectionStatus.CONNECTED
+                        }
+                    } else {
+                        // Still more ACKs pending, remain in (or switch to) SENDING_PENDING_ACK if we were connecting
+                        if (_connectionStatus.value == ConnectionStatus.CONNECTING) {
+                            _connectionStatus.value = ConnectionStatus.SENDING_PENDING_ACK
+                        }
+                        Log.d(TAG, "${pendingMacroAcks.size} MACRO_ACKs still pending.")
+                    }
+                } else {
+                    Log.w(TAG, "Received ACK for unknown or timed-out MACRO_COMMAND ID: ${packet.packetId}")
+                }
             }
-            else -> {
-                Log.w(TAG, "Received unhandled packet type: ${packet.type}")
-            }
+            else -> Log.w(TAG, "Received unhandled packet type: ${packet.type}")
         }
     }
 
-
     private fun startHealthChecks() {
-        if (healthCheckJob?.isActive == true) {
-            Log.d(TAG, "Health check job already active.")
-            return
-        }
+        if (healthCheckJob?.isActive == true) return
         Log.d(TAG, "Starting health check job.")
         healthCheckJob = appScope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(HEALTH_CHECK_INTERVAL_MS)
                 val config = currentNetworkConfig
-                if (config?.ip != null && config.port != null && udpSocket != null) {
+                if (config?.ip != null && config.port != null && udpSocket != null && !udpSocket!!.isClosed) {
                     sendHealthCheckPing()
-                } else if (udpSocket == null) {
-                    Log.w(TAG, "Health check: UDP socket is null, attempting to restart.")
-                    // Attempt to restart socket if it's null but config is valid
-                    // This handles cases where socket might have failed to initialize initially
-                    // but config became valid later.
+                } else if (udpSocket == null || udpSocket!!.isClosed) {
+                    Log.w(TAG, "Health check: UDP socket is null or closed. Attempting to restart connection components.")
                     if (config?.ip != null && config.port != null){
-                        withContext(Dispatchers.Main) { // Switch to main for restart logic if it touches UI state directly
-                            Log.d(TAG, "Attempting to re-initialize socket for health check.")
-                            restartSocketAndJobs()
-                        }
+                        restartSocketAndJobs()
                     }
                 }
             }
@@ -241,89 +244,94 @@ class ConnectionManager @Inject constructor(
 
     private fun sendHealthCheckPing() {
         val config = currentNetworkConfig ?: return
-        val ip = config.ip ?: return
-        val port = config.port ?: return
         val socket = udpSocket ?: return
 
-        val pingPacket = UdpPacket(type = UdpPacketType.HEALTH_CHECK_PING, payload = null)
-        val packetId = pingPacket.packetId // Get the generated ID
+        val pingPacket = UdpPacket(type = UdpPacketType.HEALTH_CHECK_PING)
+        val packetId = pingPacket.packetId
         val sendTime = pingPacket.timestamp
+        val ip = config.ip ?: return
+        val port = config.port ?: return
 
         try {
             val jsonData = json.encodeToString(pingPacket)
             val dataBytes = jsonData.toByteArray(Charsets.UTF_8)
-            val datagramPacket = DatagramPacket(
-                /* buf = */ dataBytes,
-                /* length = */ dataBytes.size,
-                /* address = */ InetAddress.getByName(ip),
-                /* port = */ port
-            )
+            val datagramPacket = DatagramPacket(dataBytes, dataBytes.size, InetAddress.getByName(ip), port)
             socket.send(datagramPacket)
-            synchronized(pendingPings) {
-                pendingPings[packetId] = sendTime
-            }
+            pendingPings[packetId] = sendTime
             Log.i(TAG, "Sent HEALTH_CHECK_PING (ID: $packetId) to ${config.ip}:${config.port}")
         } catch (e: Exception) {
             Log.e(TAG, "Error sending HEALTH_CHECK_PING (ID: $packetId): ${e.message}", e)
-            // Consider this a failed health check attempt immediately
-            handlePingTimeout(packetId) // Reuse timeout logic for send failure
+            handlePingTimeout(packetId, isSendFailure = true)
         }
     }
 
     private fun startPingTimeoutChecker() {
-        if (pingTimeoutJob?.isActive == true) {
-            Log.d(TAG, "Ping timeout checker job already active.")
-            return
-        }
+        if (pingTimeoutJob?.isActive == true) return
         Log.d(TAG, "Starting PING timeout checker job.")
         pingTimeoutJob = appScope.launch(Dispatchers.IO) {
             while (isActive) {
-                delay(PING_TIMEOUT_MS / 2) // Check more frequently than the timeout itself
+                delay(PING_TIMEOUT_MS / 2)
                 val currentTime = System.currentTimeMillis()
                 val pingsToRemove = mutableListOf<String>()
-
-                synchronized(pendingPings) {
-                    pendingPings.forEach { (id, sendTime) ->
-                        if ((currentTime - sendTime) > PING_TIMEOUT_MS) {
-                            pingsToRemove.add(id)
-                        }
-                    }
-                    pingsToRemove.forEach { id ->
-                        handlePingTimeout(id)
+                pendingPings.forEach { (id, sendTime) ->
+                    if ((currentTime - sendTime) > PING_TIMEOUT_MS) {
+                        pingsToRemove.add(id)
                     }
                 }
+                pingsToRemove.forEach { id -> handlePingTimeout(id) }
             }
             Log.d(TAG, "PING timeout checker job ended.")
         }
     }
 
-    private fun handlePingTimeout(packetId: String) {
-        synchronized(pendingPings) {
-            if (pendingPings.remove(packetId) != null) { // Ensure it was actually pending
-                Log.w(TAG, "PING (ID: $packetId) timed out / send failed.")
-                _consecutiveSuccessfulHealthChecks.value = 0
-                _consecutiveFailedHealthChecks.value = (_consecutiveFailedHealthChecks.value + 1)
+    private fun handlePingTimeout(packetId: String, isSendFailure: Boolean = false) {
+        if (pendingPings.remove(packetId) != null || isSendFailure) {
+            Log.w(TAG, "PING (ID: $packetId) timed out or send failed.")
+            _consecutiveSuccessfulHealthChecks.value = 0 // Reset success counter on any PING failure/timeout
+            _consecutiveFailedHealthChecks.value = (_consecutiveFailedHealthChecks.value + 1)
 
-                if (_consecutiveFailedHealthChecks.value >= MAX_FAILED_HEALTH_CHECKS &&
-                    _connectionStatus.value != ConnectionStatus.CONNECTION_LOST) {
-                    Log.e(TAG, "Max failed health checks reached. Status -> CONNECTION_LOST")
-                    _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
-                    // Optionally, could try to restart all jobs after a delay if connection is lost
-                } else if (_connectionStatus.value != ConnectionStatus.CONNECTION_LOST &&
-                    _connectionStatus.value != ConnectionStatus.NO_CONFIG) {
-                    // If not completely lost, and not NO_CONFIG, it's effectively in a CONNECTING/retrying state
-                    if(_connectionStatus.value != ConnectionStatus.CONNECTING) {
-                        Log.d(TAG, "Ping timeout, status -> CONNECTING (was ${_connectionStatus.value})")
-                        _connectionStatus.value = ConnectionStatus.CONNECTING
-                    }
+            if (_consecutiveFailedHealthChecks.value >= MAX_FAILED_HEALTH_CHECKS &&
+                _connectionStatus.value != ConnectionStatus.CONNECTION_LOST) {
+                Log.e(TAG, "Max failed health checks reached. Status -> CONNECTION_LOST")
+                _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
+            } else if (_connectionStatus.value != ConnectionStatus.CONNECTION_LOST &&
+                _connectionStatus.value != ConnectionStatus.NO_CONFIG) {
+                if (_connectionStatus.value != ConnectionStatus.CONNECTING) {
+                    Log.d(TAG, "Ping timeout/failure, status -> CONNECTING (was ${_connectionStatus.value})")
+                    _connectionStatus.value = ConnectionStatus.CONNECTING
                 }
             }
         }
     }
 
+    private fun startAckTimeoutChecker() {
+        if (ackTimeoutJob?.isActive == true) return
+        Log.d(TAG, "Starting MACRO_ACK timeout checker job.")
+        ackTimeoutJob = appScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(MACRO_ACK_TIMEOUT_MS / 2)
+                val currentTime = System.currentTimeMillis()
+                val acksToRemove = mutableListOf<String>()
+                pendingMacroAcks.forEach { (id, sendTime) ->
+                    if ((currentTime - sendTime) > MACRO_ACK_TIMEOUT_MS) {
+                        acksToRemove.add(id)
+                    }
+                }
+                acksToRemove.forEach { id -> handleMacroAckTimeout(id) }
+            }
+            Log.d(TAG, "MACRO_ACK timeout checker job ended.")
+        }
+    }
 
-    // Public method to send a macro command (will be used in Phase 3)
-    // This will wrap the InputAction into a UdpPacket
+    private fun handleMacroAckTimeout(packetId: String, isSendFailure: Boolean = false) {
+        if (pendingMacroAcks.remove(packetId) != null || isSendFailure) {
+            Log.e(TAG, "MACRO_COMMAND (ID: $packetId) ACK timed out or send failed. Status -> CONNECTION_LOST")
+            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
+            _consecutiveFailedHealthChecks.value = MAX_FAILED_HEALTH_CHECKS // Treat as critical failure
+            _consecutiveSuccessfulHealthChecks.value = 0
+        }
+    }
+
     fun sendMacroCommand(inputActionJson: String, macroTitle: String) {
         val config = currentNetworkConfig ?: run {
             Log.w(TAG, "Cannot send macro '$macroTitle', network config missing.")
@@ -332,48 +340,48 @@ class ConnectionManager @Inject constructor(
         }
         val socket = udpSocket ?: run {
             Log.e(TAG, "Cannot send macro '$macroTitle', UDP socket is null.")
-            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST // Or attempt restart
+            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
             if (config.ip != null && config.port != null) restartSocketAndJobs()
             return
         }
 
-        val ip = config.ip ?: return
-        val port = config.port ?: return
         val commandPacket = UdpPacket(
             type = UdpPacketType.MACRO_COMMAND,
             payload = inputActionJson
         )
-        // In Phase 3, we'll add this packetId to a pendingAcks map
+        val packetId = commandPacket.packetId
+        val sendTime = commandPacket.timestamp
+        val ip = config.ip ?: return
+        val port = config.port ?: return
 
         appScope.launch(Dispatchers.IO) {
             try {
                 val jsonData = json.encodeToString(commandPacket)
                 val dataBytes = jsonData.toByteArray(Charsets.UTF_8)
                 val datagramPacket = DatagramPacket(
-                    /* buf = */ dataBytes,
-                    /* length = */ dataBytes.size,
-                    /* address = */ InetAddress.getByName(ip),
-                    /* port = */ port
+                    dataBytes, dataBytes.size,
+                    InetAddress.getByName(ip), port
                 )
                 socket.send(datagramPacket)
-                Log.i(TAG, "Sent MACRO_COMMAND (ID: ${commandPacket.packetId}, Title: $macroTitle) to ${config.ip}:${config.port}")
-                // Update status to SENDING_PENDING_ACK in Phase 3
+                pendingMacroAcks[packetId] = sendTime
+                Log.i(TAG, "Sent MACRO_COMMAND (ID: $packetId, Title: $macroTitle) to ${config.ip}:${config.port}")
+
+                if (_connectionStatus.value == ConnectionStatus.CONNECTED || _connectionStatus.value == ConnectionStatus.CONNECTING) {
+                    _connectionStatus.value = ConnectionStatus.SENDING_PENDING_ACK
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending MACRO_COMMAND (ID: ${commandPacket.packetId}, Title: $macroTitle): ${e.message}", e)
-                // Handle send failure, potentially mark as lost packet in Phase 3
-                _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
+                Log.e(TAG, "Error sending MACRO_COMMAND (ID: $packetId, Title: $macroTitle): ${e.message}", e)
+                handleMacroAckTimeout(packetId, isSendFailure = true)
             }
         }
     }
 
-
     fun getCurrentConnectionStatus(): ConnectionStatus = _connectionStatus.value
 
-    override fun toString(): String { // For easier logging from other ViewModels
-        return "ConnectionManager(status=${_connectionStatus.value}, config=$currentNetworkConfig)"
+    override fun toString(): String {
+        return "ConnectionManager(status=${_connectionStatus.value}, config=$currentNetworkConfig, pP=${pendingPings.size}, pA=${pendingMacroAcks.size})"
     }
 
-    // Called when the ViewModel holding this manager is cleared.
     fun onCleared() {
         Log.d(TAG, "ConnectionManager cleared. Stopping socket and jobs.")
         stopSocketAndJobs()
