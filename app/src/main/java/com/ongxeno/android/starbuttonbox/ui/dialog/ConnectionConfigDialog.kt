@@ -61,6 +61,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.data.NetworkConfig
 import com.ongxeno.android.starbuttonbox.ui.screen.setting.DiscoveryState
 import com.ongxeno.android.starbuttonbox.ui.screen.setting.SettingViewModel
+import com.ongxeno.android.starbuttonbox.ui.theme.OnDarkPrimary
+import com.ongxeno.android.starbuttonbox.ui.theme.OrangeDarkPrimary
 import kotlinx.coroutines.flow.StateFlow
 
 private enum class ConfigMode(val label: String) {
@@ -71,6 +73,7 @@ private enum class ConfigMode(val label: String) {
 /**
  * A dialog composable for displaying and editing network connection settings (IP/Port).
  * Includes modes for Automatic Discovery and Manual Configuration, styled with M3 components.
+ * The selected segmented button now uses the primary orange accent.
  *
  * @param viewModel The SettingViewModel instance providing discovery state and actions.
  * @param onDismissRequest Lambda called when the dialog should be dismissed. Accepts optional Context.
@@ -80,7 +83,7 @@ private enum class ConfigMode(val label: String) {
 @OptIn(ExperimentalMaterial3Api::class) // Needed for SegmentedButtonRow
 @Composable
 fun ConnectionConfigDialog(
-    viewModel: SettingViewModel, // Pass the ViewModel
+    viewModel: SettingViewModel,
     onDismissRequest: (context: Context?) -> Unit,
     onSave: (ip: String, port: Int) -> Unit,
     networkConfigFlow: StateFlow<NetworkConfig?>,
@@ -106,10 +109,9 @@ fun ConnectionConfigDialog(
             if (manualPort != (config.port?.toString() ?: "")) {
                 manualPort = config.port?.toString() ?: ""
             }
-            // Optional: Default to manual mode if already configured
-            // if (config.ip != null && config.port != null && selectedMode == ConfigMode.AUTOMATIC) {
-            //     selectedMode = ConfigMode.MANUAL
-            // }
+            if (config.ip != null && config.port != null && selectedMode == ConfigMode.AUTOMATIC) {
+                selectedMode = ConfigMode.MANUAL
+            }
         }
     }
 
@@ -138,23 +140,22 @@ fun ConnectionConfigDialog(
             dismissOnBackPress = !isInitialSetup || isSaveEnabled
         ),
     ) {
-        // Use Card for standard M3 dialog appearance
         Card(
             shape = MaterialTheme.shapes.large,
-            modifier = Modifier.padding(16.dp) // Padding around the card
+            modifier = Modifier.padding(16.dp)
         ) {
             Column(
                 modifier = Modifier
                     // Apply standard Material Design padding for dialog content
                     .padding(PaddingValues(all = 24.dp))
-                    .verticalScroll(rememberScrollState()) // Make content scrollable if needed
+                    .verticalScroll(rememberScrollState())
             ) {
                 // --- Dialog Title ---
                 Text(
                     text = if (isInitialSetup) "Initial Connection Setup" else "Connection Settings",
                     style = MaterialTheme.typography.headlineSmall,
                 )
-                Spacer(modifier = Modifier.height(16.dp)) // Space after title
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // --- Mode Selection ---
                 SingleChoiceSegmentedButtonRow(
@@ -173,14 +174,18 @@ fun ConnectionConfigDialog(
                                 }
                             },
                             shape = SegmentedButtonDefaults.itemShape(index = index, count = ConfigMode.entries.size),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = OrangeDarkPrimary,
+                                activeContentColor = OnDarkPrimary,
+                            ),
                             label = { Text(mode.label) }
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp)) // More space after mode selection
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // --- Content based on Mode ---
-                Box(modifier = Modifier.heightIn(min = 180.dp)) { // Give content area min height
+                Box(modifier = Modifier.heightIn(min = 180.dp)) {
                     when (selectedMode) {
                         ConfigMode.AUTOMATIC -> {
                             AutomaticDiscoveryContent(
@@ -204,18 +209,18 @@ fun ConnectionConfigDialog(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp)) // Space before buttons
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // --- Action Buttons ---
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End // Align buttons to the end
+                    horizontalArrangement = Arrangement.End
                 ) {
                     if (!isInitialSetup) {
                         TextButton(onClick = { onDismissRequest(null) }) {
                             Text("Cancel")
                         }
-                        Spacer(modifier = Modifier.width(8.dp)) // Space between buttons
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
                     Button(
                         onClick = {
@@ -268,7 +273,6 @@ private fun ManualConfigContent(
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(bottom = 8.dp) // Add padding below text
         )
-        // Use standard spacing
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
             value = ipAddress,
@@ -278,7 +282,7 @@ private fun ManualConfigContent(
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(16.dp)) // Consistent spacing
+        Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
             value = port,
             onValueChange = onPortChange,
@@ -299,10 +303,12 @@ private fun AutomaticDiscoveryContent(
     onServerSelected: (NetworkConfig) -> Unit,
     onRefreshClicked: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) { // Allow column to take width
+    Column(modifier = Modifier.fillMaxWidth()) {
         // --- Status Row ---
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), // Add padding below status
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp), // Add padding below status
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -316,7 +322,9 @@ private fun AutomaticDiscoveryContent(
             Text(
                 statusText,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f).padding(end = 8.dp) // Give text space
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp) // Give text space
             )
 
             // Show progress indicator or refresh button
@@ -337,7 +345,11 @@ private fun AutomaticDiscoveryContent(
                     Box(modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 100.dp, max = 180.dp) // Define height constraints
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant,
+                            MaterialTheme.shapes.medium
+                        )
                     ) {
                         LazyColumn {
                             itemsIndexed(discoveryState.servers, key = { _, server -> "${server.ip}:${server.port}" }) { index, server ->
@@ -360,7 +372,9 @@ private fun AutomaticDiscoveryContent(
                     "Error: ${discoveryState.message}",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
                 )
             }
             // Idle and Searching states don't need extra content here
@@ -384,9 +398,9 @@ private fun ServerListItem(
         headlineContent = { Text("${server.ip}:${server.port}") },
         leadingContent = {
             Icon(
-                Icons.Filled.Lan, // Network/Server Icon
+                Icons.Filled.Lan,
                 contentDescription = "Server",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant // Use a less prominent color
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
         trailingContent = {
@@ -394,13 +408,13 @@ private fun ServerListItem(
                 Icon(
                     Icons.Filled.Check,
                     contentDescription = "Selected",
-                    tint = MaterialTheme.colorScheme.primary // Use primary color for check
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         },
         modifier = Modifier.clickable(
             onClick = onClick,
-            role = Role.RadioButton // Semantics for selection
+            role = Role.RadioButton
         ),
         colors = ListItemDefaults.colors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface // Use secondary container for selected bg
