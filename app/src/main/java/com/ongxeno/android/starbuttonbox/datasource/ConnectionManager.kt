@@ -31,6 +31,9 @@ private const val MAX_FAILED_HEALTH_CHECKS = 3
 private const val MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED = 2
 private const val UDP_RECEIVE_BUFFER_SIZE = 2048
 
+// --- New Constant for Sliding Window ---
+private const val RESPONSE_TIME_WINDOW_SIZE = 5 // Number of latency samples to average
+
 @Singleton
 class ConnectionManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -53,6 +56,10 @@ class ConnectionManager @Inject constructor(
     private val _latestResponseTimeMs = MutableStateFlow<Long?>(null)
     val latestResponseTimeMs: StateFlow<Long?> = _latestResponseTimeMs.asStateFlow()
 
+    // Storage for the sliding window of recent latency values
+    private val recentLatencyValues = mutableListOf<Long>()
+
+    // Current network configuration
     private var currentNetworkConfig: NetworkConfig? = null
 
     private val _lastSuccessfulHealthCheckTime = MutableStateFlow<Long?>(null)
@@ -74,20 +81,66 @@ class ConnectionManager @Inject constructor(
                     if (oldConfig?.ip != config.ip || oldConfig?.port != config.port || udpSocket == null || udpSocket!!.isClosed) {
                         Log.i(TAG, "Network config changed or socket not ready. Restarting connection components.")
                         _connectionStatus.value = ConnectionStatus.CONNECTING
-                        _latestResponseTimeMs.value = null // Reset response time on config change
+                        resetResponseTimeTracking() // Reset response time on config change
                         restartSocketAndJobs()
                     } else if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
                         Log.i(TAG, "Valid network config present, attempting to connect/reconnect. Status -> CONNECTING")
                         _connectionStatus.value = ConnectionStatus.CONNECTING
-                        _latestResponseTimeMs.value = null // Reset on reconnect attempt
+                        resetResponseTimeTracking() // Reset on reconnect attempt
                     }
                 } else {
                     Log.w(TAG, "Invalid or missing network config. Setting status to NO_CONFIG.")
                     _connectionStatus.value = ConnectionStatus.NO_CONFIG
-                    _latestResponseTimeMs.value = null // No connection, no response time
+                    resetResponseTimeTracking() // No connection, no response time
                     stopSocketAndJobs()
                 }
             }
+        }
+    }
+
+    /**
+     * Updates the sliding window with a new latency value and recalculates the average.
+     * Updates the `_latestResponseTimeMs` StateFlow.
+     * This function is synchronized to ensure thread safety.
+     *
+     * @param newLatency The newly calculated estimated one-way latency (must be non-negative).
+     */
+    @Synchronized // Ensure thread safety when modifying the list and calculating average
+    private fun updateAverageResponseTime(newLatency: Long) {
+        if (newLatency < 0) {
+            Log.w(TAG, "Attempted to add negative latency ($newLatency ms) to average. Ignoring.")
+            return // Ignore invalid negative latency
+        }
+
+        recentLatencyValues.add(newLatency)
+
+        // Maintain window size by removing the oldest value if necessary
+        while (recentLatencyValues.size > RESPONSE_TIME_WINDOW_SIZE) {
+            recentLatencyValues.removeAt(0)
+        }
+
+        // Calculate and update the average response time StateFlow
+        if (recentLatencyValues.isNotEmpty()) {
+            val average = recentLatencyValues.average().roundToLong()
+            _latestResponseTimeMs.value = average
+            // Verbose log to see the calculation details
+            Log.v(TAG,"Updated average latency: $average ms (Window: $recentLatencyValues)")
+        } else {
+            // If the list becomes empty (e.g., after reset), set average to null
+            _latestResponseTimeMs.value = null
+        }
+    }
+
+    /**
+     * Resets the response time tracking by clearing the history and setting the average to null.
+     * This function is synchronized.
+     */
+    @Synchronized
+    private fun resetResponseTimeTracking() {
+        if (recentLatencyValues.isNotEmpty() || _latestResponseTimeMs.value != null) {
+            recentLatencyValues.clear()
+            _latestResponseTimeMs.value = null
+            Log.d(TAG, "Response time tracking reset.")
         }
     }
 
@@ -115,11 +168,10 @@ class ConnectionManager @Inject constructor(
             if (_connectionStatus.value != ConnectionStatus.CONNECTING && _connectionStatus.value != ConnectionStatus.SENDING_PENDING_ACK) {
                 _connectionStatus.value = ConnectionStatus.CONNECTING
             }
-            _latestResponseTimeMs.value = null // Reset on restart
         } catch (e: SocketException) {
             Log.e(TAG, "Error creating UDP socket: ${e.message}", e)
             _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
-            _latestResponseTimeMs.value = null
+            resetResponseTimeTracking()
             stopSocketAndJobs()
         }
     }
@@ -140,7 +192,7 @@ class ConnectionManager @Inject constructor(
         _consecutiveFailedHealthChecks.value = 0
         _consecutiveSuccessfulHealthChecks.value = 0
         _lastSuccessfulHealthCheckTime.value = null
-        _latestResponseTimeMs.value = null // Reset response time when stopping
+        resetResponseTimeTracking() // Reset response time when stopping
 
         try {
             udpSocket?.close()
@@ -183,16 +235,17 @@ class ConnectionManager @Inject constructor(
     }
 
     private fun processReceivedPacket(packet: UdpPacket) {
+        val clientReceiveTime = System.currentTimeMillis()
         Log.d(TAG, "Processing packet: ID=${packet.packetId}, Type=${packet.type}")
         when (packet.type) {
             UdpPacketType.HEALTH_CHECK_PONG -> {
                 val pingSendTime = pendingPings.remove(packet.packetId)
                 if (pingSendTime != null) {
-                    // Calculate one-way latency: PONG's timestamp (server time when PONG was sent) - PING's timestamp (client time when PING was sent)
-                    val oneWayLatency = packet.timestamp - pingSendTime
+                    val rtt = clientReceiveTime - pingSendTime
+                    val oneWayLatency = (rtt.toDouble() / 2.0).roundToLong()
                     if (oneWayLatency >= 0) { // Ensure non-negative latency
-                        _latestResponseTimeMs.value = oneWayLatency
-                        Log.i(TAG, "HEALTH_CHECK_PONG received for ID: ${packet.packetId}. Client->Server Latency: $oneWayLatency ms (PONG_ts: ${packet.timestamp}, PING_ts: $pingSendTime)")
+                        updateAverageResponseTime(oneWayLatency)
+                        Log.i(TAG, "HEALTH_CHECK_PONG received for ID: ${packet.packetId}. Latency: $oneWayLatency ms (PONG_ts: ${packet.timestamp}, PING_ts: $pingSendTime)")
                     } else {
                         // This case might happen due to clock differences or network quirks.
                         // Could log as warning or use RTT/2 as a fallback.
@@ -218,11 +271,11 @@ class ConnectionManager @Inject constructor(
                 // 2. Use MACRO_ACK to calculate response time
                 val commandSendTime = pendingMacroAcks.remove(packet.packetId)
                 if (commandSendTime != null) {
-                    // Calculate one-way latency: ACK's timestamp (server time when ACK was sent) - COMMAND's timestamp (client time when COMMAND was sent)
-                    val oneWayLatency = packet.timestamp - commandSendTime
+                    val rtt = clientReceiveTime - commandSendTime
+                    val oneWayLatency = (rtt.toDouble() / 2.0).roundToLong()
                     if (oneWayLatency >= 0) {
-                        _latestResponseTimeMs.value = oneWayLatency // Update with this more recent measurement
-                        Log.i(TAG, "MACRO_ACK received for ID: ${packet.packetId}. Client->Server Latency (ACK): $oneWayLatency ms (ACK_ts: ${packet.timestamp}, CMD_ts: $commandSendTime)")
+                        updateAverageResponseTime(oneWayLatency)
+                        Log.i(TAG, "MACRO_ACK received for ID: ${packet.packetId}. Latency (ACK): $oneWayLatency ms (ACK_ts: ${packet.timestamp}, CMD_ts: $commandSendTime)")
                     } else {
                         Log.w(TAG, "Calculated negative latency for ACK ID ${packet.packetId} ($oneWayLatency ms). ACK_ts: ${packet.timestamp}, CMD_ts: $commandSendTime. Not updating response time.")
                     }
@@ -325,7 +378,7 @@ class ConnectionManager @Inject constructor(
     private fun handlePingTimeout(packetId: String, isSendFailure: Boolean = false) {
         if (pendingPings.remove(packetId) != null || isSendFailure) {
             Log.w(TAG, "PING (ID: $packetId) timed out or send failed.")
-            _latestResponseTimeMs.value = null // Clear response time on timeout
+            resetResponseTimeTracking() // Clear response time on timeout
             _consecutiveSuccessfulHealthChecks.value = 0
             _consecutiveFailedHealthChecks.value = (_consecutiveFailedHealthChecks.value + 1)
 
@@ -366,7 +419,7 @@ class ConnectionManager @Inject constructor(
         if (pendingMacroAcks.remove(packetId) != null || isSendFailure) {
             Log.e(TAG, "MACRO_COMMAND (ID: $packetId) ACK timed out or send failed. Status -> CONNECTION_LOST")
             _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
-            _latestResponseTimeMs.value = null // Clear response time
+            resetResponseTimeTracking() // Clear response time
             _consecutiveFailedHealthChecks.value = MAX_FAILED_HEALTH_CHECKS
             _consecutiveSuccessfulHealthChecks.value = 0
         }
@@ -388,10 +441,6 @@ class ConnectionManager @Inject constructor(
             Log.e(TAG, "Cannot send macro '$macroTitle', UDP socket is null.")
             _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
             if (config.ip != null && config.port != null) restartSocketAndJobs()
-            return
-        }
-        if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
-            Log.w(TAG, "Cannot send macro '$macroTitle', connection status is ${_connectionStatus.value}")
             return
         }
 
