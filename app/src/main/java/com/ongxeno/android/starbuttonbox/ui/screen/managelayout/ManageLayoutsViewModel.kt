@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
@@ -390,6 +391,17 @@ class ManageLayoutsViewModel @Inject constructor(
                 pcImportWebServer.stopServer()
                 Log.d(_tag, "Stopped Ktor server after handling JSON.")
 
+                _showImportFromPcDialog.value = false
+                _showImportFromPcDialog.value = true
+                _showImportFromPcDialog.value = false
+                _showImportFromPcDialog.value = false
+                _showImportFromPcDialog.value = false
+                _showImportFromPcDialog.value = false
+                _showImportFromPcDialog.value = false
+                _showImportFromPcDialog.value = false
+                _showImportFromPcDialog.value = false
+                _importFromPcStatusMessage.value = null
+
                 // 5. Clean up the temporary file
                 tempFile?.let { fileToDelete ->
                     if (fileToDelete.exists()) {
@@ -400,7 +412,6 @@ class ManageLayoutsViewModel @Inject constructor(
                         }
                     }
                 }
-                // Dialog remains open until user dismisses it or ImportResultDialog shows up
             }
         }
     }

@@ -85,7 +85,6 @@ fun ManageLayoutsScreen(
     val layoutToEdit by viewModel.layoutToEditState
     val importResult by viewModel.importResultState.collectAsStateWithLifecycle()
     val connectionStatus by viewModel.connectionStatusState.collectAsStateWithLifecycle()
-    // --- Collect state for the new dialog ---
     val showImportFromPcDialog by viewModel.showImportFromPcDialogState.collectAsStateWithLifecycle()
 
     val density = LocalDensity.current.density
@@ -181,11 +180,12 @@ fun ManageLayoutsScreen(
                 actions = {
                     TextButton(
                         onClick = {
-                            if (connectionStatus == ConnectionStatus.CONNECTED || connectionStatus == ConnectionStatus.SENDING_PENDING_ACK) {
-                                viewModel.initiatePcImport()
-                            } else {
-                                Toast.makeText(context, "Server connection required for PC import", Toast.LENGTH_SHORT).show()
-                            }
+                            viewModel.initiatePcImport()
+//                            if (connectionStatus == ConnectionStatus.CONNECTED || connectionStatus == ConnectionStatus.SENDING_PENDING_ACK) {
+//                                viewModel.initiatePcImport()
+//                            } else {
+//                                Toast.makeText(context, "Server connection required for PC import", Toast.LENGTH_SHORT).show()
+//                            }
                          },
                         enabled = true
                     ) {
@@ -291,7 +291,6 @@ fun ManageLayoutsScreen(
                 viewModel = viewModel
             )
         }
-
     }
 }
 
