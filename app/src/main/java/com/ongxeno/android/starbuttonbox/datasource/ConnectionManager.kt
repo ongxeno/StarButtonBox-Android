@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.ongxeno.android.starbuttonbox.data.ConnectionStatus
 import com.ongxeno.android.starbuttonbox.data.NetworkConfig
+import com.ongxeno.android.starbuttonbox.data.TriggerImportPayload
 import com.ongxeno.android.starbuttonbox.data.UdpPacket
 import com.ongxeno.android.starbuttonbox.data.UdpPacketType
 import com.ongxeno.android.starbuttonbox.di.ApplicationScope
@@ -245,7 +246,18 @@ class ConnectionManager @Inject constructor(
                     Log.w(TAG, "Received ACK for unknown or timed-out MACRO_COMMAND ID: ${packet.packetId}")
                 }
             }
-            else -> Log.w(TAG, "Received unhandled packet type: ${packet.type}")
+            // Ignore TRIGGER_IMPORT_BROWSER on receive side for now
+            UdpPacketType.TRIGGER_IMPORT_BROWSER -> {
+                 Log.d(TAG, "Received TRIGGER_IMPORT_BROWSER packet (ignoring on client). ID: ${packet.packetId}")
+            }
+            // Added HEALTH_CHECK_PING case
+            UdpPacketType.HEALTH_CHECK_PING -> {
+                 Log.d(TAG, "Received HEALTH_CHECK_PING packet (ignoring on client). ID: ${packet.packetId}")
+            }
+            // Added MACRO_COMMAND case
+            UdpPacketType.MACRO_COMMAND -> {
+                 Log.d(TAG, "Received MACRO_COMMAND packet (ignoring on client). ID: ${packet.packetId}")
+            }
         }
     }
 
@@ -360,6 +372,12 @@ class ConnectionManager @Inject constructor(
         }
     }
 
+    /**
+     * Sends a MACRO_COMMAND packet to the server.
+     *
+     * @param inputActionJson The serialized InputAction JSON string.
+     * @param macroTitle The title of the macro for logging purposes.
+     */
     fun sendMacroCommand(inputActionJson: String, macroTitle: String) {
         val config = currentNetworkConfig ?: run {
             Log.w(TAG, "Cannot send macro '$macroTitle', network config missing.")
@@ -407,6 +425,70 @@ class ConnectionManager @Inject constructor(
             }
         }
     }
+
+    /**
+     * Sends a TRIGGER_IMPORT_BROWSER packet to the server.
+     * This packet contains the URL for the PC browser to open.
+     *
+     * @param url The URL of the Ktor server running on the Android device.
+     * @return True if the packet was successfully queued for sending, false otherwise (e.g., no connection).
+     */
+    fun sendTriggerImportBrowser(url: String): Boolean {
+        val config = currentNetworkConfig ?: run {
+            Log.w(TAG, "Cannot send TRIGGER_IMPORT_BROWSER, network config missing.")
+            _connectionStatus.value = ConnectionStatus.NO_CONFIG
+            return false
+        }
+        val socket = udpSocket ?: run {
+            Log.e(TAG, "Cannot send TRIGGER_IMPORT_BROWSER, UDP socket is null.")
+            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
+            if (config.ip != null && config.port != null) restartSocketAndJobs()
+            return false
+        }
+        if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
+            Log.w(TAG, "Cannot send TRIGGER_IMPORT_BROWSER, connection status is ${_connectionStatus.value}")
+            return false
+        }
+
+        // Create the specific payload for this packet type
+        val payload = TriggerImportPayload(url = url)
+        val payloadJson: String = try {
+             json.encodeToString(payload)
+        } catch (e: Exception) {
+             Log.e(TAG, "Error serializing TriggerImportPayload", e)
+             return false // Cannot send if payload serialization fails
+        }
+
+        // Create the main UDP packet
+        val triggerPacket = UdpPacket(
+            type = UdpPacketType.TRIGGER_IMPORT_BROWSER,
+            payload = payloadJson,
+            timestamp = System.currentTimeMillis()
+        )
+        val packetId = triggerPacket.packetId
+        config.port ?: return false // Should not happen if config is valid, but check anyway
+
+        // Launch the sending operation in the background
+        appScope.launch(Dispatchers.IO) {
+            try {
+                val jsonData = json.encodeToString(triggerPacket)
+                val dataBytes = jsonData.toByteArray(Charsets.UTF_8)
+                val datagramPacket = DatagramPacket(
+                    dataBytes, dataBytes.size,
+                    InetAddress.getByName(config.ip), config.port
+                )
+                socket.send(datagramPacket)
+                // No ACK expected for this packet type, so don't add to pendingAcks
+                Log.i(TAG, "Sent TRIGGER_IMPORT_BROWSER (ID: $packetId, URL: $url) to ${config.ip}:${config.port}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending TRIGGER_IMPORT_BROWSER (ID: $packetId): ${e.message}", e)
+                // Optionally handle send failure, maybe retry or notify user?
+                // For now, just log the error. The ViewModel handles the user feedback.
+            }
+        }
+        return true // Indicate that the send operation was launched
+    }
+
 
     fun getCurrentConnectionStatus(): ConnectionStatus = _connectionStatus.value
 

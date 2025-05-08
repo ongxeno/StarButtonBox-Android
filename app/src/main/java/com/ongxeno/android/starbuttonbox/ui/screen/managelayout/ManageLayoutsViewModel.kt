@@ -9,14 +9,15 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ongxeno.android.starbuttonbox.data.ConnectionStatus // <-- Import ConnectionStatus
+import com.ongxeno.android.starbuttonbox.data.ConnectionStatus
 import com.ongxeno.android.starbuttonbox.data.ExportedLayout
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.ImportResult
 import com.ongxeno.android.starbuttonbox.data.LayoutDefinition
 import com.ongxeno.android.starbuttonbox.data.LayoutType
-import com.ongxeno.android.starbuttonbox.datasource.ConnectionManager // <-- Import ConnectionManager
+import com.ongxeno.android.starbuttonbox.datasource.ConnectionManager
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository
+import com.ongxeno.android.starbuttonbox.datasource.PcImportWebServer // <-- Import Ktor Web Server
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,8 +33,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
-import java.io.File // <-- Import File for temporary storage
-import java.io.FileOutputStream // <-- Import FileOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
@@ -45,6 +46,7 @@ import javax.inject.Inject
 class ManageLayoutsViewModel @Inject constructor(
     private val layoutRepository: LayoutRepository,
     private val connectionManager: ConnectionManager, // <-- Inject ConnectionManager
+    private val pcImportWebServer: PcImportWebServer, // <-- Inject PcImportWebServer
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -86,7 +88,7 @@ class ManageLayoutsViewModel @Inject constructor(
     private val _importResult = MutableStateFlow<ImportResult>(ImportResult.Idle)
     val importResultState: StateFlow<ImportResult> = _importResult.asStateFlow()
 
-    // --- NEW: State for Import from PC Dialog ---
+    // --- State for Import from PC Dialog ---
     private val _showImportFromPcDialog = MutableStateFlow(false)
     val showImportFromPcDialogState: StateFlow<Boolean> = _showImportFromPcDialog.asStateFlow()
 
@@ -100,7 +102,7 @@ class ManageLayoutsViewModel @Inject constructor(
     // JSON parser
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    // --- Event Handlers ---
+    // --- Event Handlers (Existing ones remain unchanged) ---
 
     /** Saves the new order of layouts. */
     fun saveLayoutOrder(orderedIds: List<String>) {
@@ -123,7 +125,6 @@ class ManageLayoutsViewModel @Inject constructor(
             _showDeleteConfirmationDialog.value = true
         } else if (layoutInfo != null && !layoutInfo.isDeletable) {
             Log.w(_tag, "Attempted to delete non-deletable layout: ${layoutInfo.id}")
-            // Optionally show a Toast or message here
         }
     }
 
@@ -148,7 +149,7 @@ class ManageLayoutsViewModel @Inject constructor(
     /** Shows the dialog to add a new layout. */
     fun requestAddLayout() {
         Log.d(_tag, "Requesting Add Layout Dialog")
-        _layoutToEditState.value = null // Ensure edit state is cleared
+        _layoutToEditState.value = null
         _showAddEditLayoutDialog.value = true
     }
 
@@ -160,7 +161,6 @@ class ManageLayoutsViewModel @Inject constructor(
             _showAddEditLayoutDialog.value = true
         } else {
             Log.w(_tag, "Edit requested for non-editable layout type: ${layoutInfo.type} for ID: ${layoutInfo.id}")
-            // Optionally show a Toast or message here
         }
     }
 
@@ -173,18 +173,16 @@ class ManageLayoutsViewModel @Inject constructor(
                 val newLayout = LayoutDefinition(
                     id = newId, title = title, layoutType = LayoutType.FREE_FORM,
                     iconName = iconName, isEnabled = true, isUserDefined = true,
-                    isDeletable = true, layoutItemsJson = null // Initially no items
+                    isDeletable = true, layoutItemsJson = null
                 )
                 layoutRepository.addLayout(newLayout)
                 Log.i(_tag, "Added new layout: $newLayout")
             } else {
                 // Edit Existing Layout
-                // Fetch the MAP of definitions to allow direct access by ID
                 val currentDefinitionsMap = layoutRepository.layoutDefinitionsFlow.first()
-                val definitionToUpdate = currentDefinitionsMap[existingId] // Access map by key
+                val definitionToUpdate = currentDefinitionsMap[existingId]
 
                 if (definitionToUpdate != null) {
-                    // Only update title and icon here, items are saved separately
                     val updatedDefinition = definitionToUpdate.copy(title = title, iconName = iconName)
                     layoutRepository.updateLayoutDefinition(updatedDefinition)
                     Log.i(_tag, "Updated layout definition: $updatedDefinition")
@@ -208,7 +206,7 @@ class ManageLayoutsViewModel @Inject constructor(
         _importResult.value = ImportResult.Idle
     }
 
-    // --- Import / Export ---
+    // --- Import / Export (Existing file import/export remain unchanged) ---
     /** Stores the ID of the layout the user wants to export. */
     fun requestExportLayout(layoutId: String) {
         Log.d(_tag, "Requesting export for layout ID: $layoutId")
@@ -231,35 +229,30 @@ class ManageLayoutsViewModel @Inject constructor(
 
         viewModelScope.launch {
             Log.d(_tag, "Attempting to export layout '$layoutId' to URI: $uri")
-            // Fetch the definition and items separately
             val definition = layoutRepository.allLayoutDefinitionsFlow.first().find { it.id == layoutId }
-            val items = layoutRepository.getLayoutItemsFlow(layoutId).first() // Get items for the specific layout
+            val items = layoutRepository.getLayoutItemsFlow(layoutId).first()
 
             if (definition == null) {
                 Log.e(_tag, "Export failed: Layout definition not found for ID '$layoutId'")
-                _importResult.value = ImportResult.Failure("Export failed: Layout not found.") // Use importResult for feedback
+                _importResult.value = ImportResult.Failure("Export failed: Layout not found.")
             } else if (definition.layoutType != LayoutType.FREE_FORM) {
                 Log.e(_tag, "Export failed: Layout '$layoutId' is not a FreeForm layout.")
                 _importResult.value = ImportResult.Failure("Export failed: Only FreeForm layouts can be exported.")
             } else {
-                // Create the ExportedLayout object using the fetched definition and items
                 val exportedData = ExportedLayout(definition = definition, items = items)
                 try {
                     val jsonString = json.encodeToString(ExportedLayout.serializer(), exportedData)
-                    // Use ContentResolver to write to the URI
                     appContext.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        OutputStreamWriter(outputStream).use { writer ->
-                            writer.write(jsonString)
-                        }
+                        OutputStreamWriter(outputStream).use { writer -> writer.write(jsonString) }
                     } ?: throw IOException("Failed to open output stream for URI: $uri")
                     Log.i(_tag, "Successfully exported layout '$layoutId' to $uri")
-                    _importResult.value = ImportResult.Success(definition, items.size) // Indicate success
+                    _importResult.value = ImportResult.Success(definition, items.size)
                 } catch (e: Exception) {
                     Log.e(_tag, "Export failed for layout '$layoutId' to $uri", e)
                     _importResult.value = ImportResult.Failure("Export failed: ${e.localizedMessage ?: "Unknown error"}")
                 }
             }
-            clearExportRequest() // Clear the ID after attempt
+            clearExportRequest()
         }
     }
 
@@ -267,9 +260,8 @@ class ManageLayoutsViewModel @Inject constructor(
     fun importLayoutFromFile(uri: Uri) {
         viewModelScope.launch {
             Log.d(_tag, "Attempting to import layout from URI: $uri")
-            _importResult.value = ImportResult.Idle // Reset status
+            _importResult.value = ImportResult.Idle
             try {
-                // Read JSON string from the URI using ContentResolver
                 val jsonString = appContext.contentResolver.openInputStream(uri)?.use { inputStream ->
                     BufferedReader(InputStreamReader(inputStream)).use { reader -> reader.readText() }
                 }
@@ -280,7 +272,6 @@ class ManageLayoutsViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Decode the JSON into the ExportedLayout structure
                 val importedLayout = json.decodeFromString(ExportedLayout.serializer(), jsonString)
 
                 // --- Validation ---
@@ -294,7 +285,6 @@ class ManageLayoutsViewModel @Inject constructor(
                     _importResult.value = ImportResult.Failure("Import failed: Layout title cannot be empty")
                     return@launch
                 }
-                // Validate icon name exists in the IconMapper
                 val iconVector = IconMapper.getIconVector(importedLayout.definition.iconName)
                 if (iconVector == Icons.AutoMirrored.Filled.HelpOutline && importedLayout.definition.iconName != "HelpOutline") {
                     Log.w(_tag, "Import failed: Imported layout has an invalid icon name: ${importedLayout.definition.iconName}")
@@ -303,24 +293,21 @@ class ManageLayoutsViewModel @Inject constructor(
                 }
                 // --- End Validation ---
 
-                // Create a new definition with a unique ID and correct flags
                 val newId = "freeform_${UUID.randomUUID()}"
-                // Serialize the items from the imported data to store in the new definition
                 val itemsJson = try {
                     json.encodeToString(ListSerializer(FreeFormItemState.serializer()), importedLayout.items ?: emptyList())
                 } catch (e: Exception) {
                     Log.e(_tag, "Error serializing items during import for new ID $newId", e)
-                    null // Store null if item serialization fails
+                    null
                 }
                 val newDefinition = importedLayout.definition.copy(
                     id = newId,
-                    isUserDefined = true, // Imported layouts are considered user-defined
-                    isDeletable = true,   // Imported layouts should be deletable
-                    isEnabled = true,     // Enable by default
-                    layoutItemsJson = itemsJson // Store the serialized items
+                    isUserDefined = true,
+                    isDeletable = true,
+                    isEnabled = true,
+                    layoutItemsJson = itemsJson
                 )
 
-                // Add the new layout definition to the repository
                 layoutRepository.addLayout(newDefinition)
                 Log.i(_tag, "Successfully imported layout '${newDefinition.title}' with new ID '$newId'")
                 _importResult.value = ImportResult.Success(newDefinition, importedLayout.items?.size ?: 0)
@@ -339,23 +326,43 @@ class ManageLayoutsViewModel @Inject constructor(
         Log.d(_tag, "Initiating Import from PC")
         _showImportFromPcDialog.value = true
         _importFromPcStatusMessage.value = "Starting import server..."
-        // TODO: Implement Ktor server start logic (likely in a separate Hilt component)
-        // TODO: Get device IP and Ktor port
-        // TODO: Send TRIGGER_IMPORT_BROWSER packet via ConnectionManager
-        // TODO: Update status message based on Ktor start/send result
-        _importFromPcStatusMessage.value = "Waiting for PC browser connection..." // Placeholder
+
+        viewModelScope.launch { // Launch in VM scope for suspend functions
+            val serverUrl = pcImportWebServer.startServer(::handleReceivedLayoutJson)
+
+            if (serverUrl != null) {
+                Log.i(_tag, "PC Import Server started at: $serverUrl")
+                // Send trigger packet to PC server via ConnectionManager
+                val success = connectionManager.sendTriggerImportBrowser(serverUrl) // Assuming this function exists now
+                if (success) {
+                    _importFromPcStatusMessage.value = "Waiting for PC browser connection..."
+                } else {
+                    _importFromPcStatusMessage.value = "Failed to notify PC server. Please check connection."
+                    // Consider stopping the server if notification fails
+                    // pcImportWebServer.stopServer()
+                    // _showImportFromPcDialog.value = false // Optionally close dialog on immediate failure
+                }
+            } else {
+                Log.e(_tag, "Failed to start PC Import Server.")
+                _importFromPcStatusMessage.value = "Error starting import server on device."
+                // Optionally close dialog after a delay
+                // delay(3000)
+                // _showImportFromPcDialog.value = false
+            }
+        }
     }
 
     /** Handles the JSON content received from the Ktor server. */
-    fun handleReceivedLayoutJson(jsonContent: String) {
+    private fun handleReceivedLayoutJson(jsonContent: String) {
         Log.d(_tag, "Handling received layout JSON from PC (Size: ${jsonContent.length})")
-        _importFromPcStatusMessage.value = "Importing layout..."
+        _importFromPcStatusMessage.value = "Processing imported layout..."
 
         viewModelScope.launch { // Perform file operations and import off the main thread
             var tempFileUri: Uri? = null
+            var tempFile: File? = null
             try {
                 // 1. Save jsonContent to a temporary file
-                val tempFile = File.createTempFile("imported_layout_", ".json", appContext.cacheDir)
+                tempFile = File.createTempFile("imported_layout_", ".json", appContext.cacheDir)
                 FileOutputStream(tempFile).use { fos ->
                     OutputStreamWriter(fos).use { writer ->
                         writer.write(jsonContent)
@@ -367,37 +374,33 @@ class ManageLayoutsViewModel @Inject constructor(
                 // 2. Call existing import function with the temp file Uri
                 importLayoutFromFile(tempFileUri) // This will update _importResult
 
-                // 3. Wait for the import result to update
-                // Note: importLayoutFromFile updates _importResult asynchronously.
-                // We might need a more robust way to link the result back here if needed,
-                // but for now, the ImportResultDialog will show the outcome.
-                _importFromPcStatusMessage.value = when (val result = importResultState.value) {
-                    is ImportResult.Success -> "Import successful: ${result.importedLayout.title}"
-                    is ImportResult.Failure -> "Import failed: ${result.message}"
-                    ImportResult.Idle -> "Import processing complete." // Fallback message
-                }
+                // 3. Update status based on the outcome (importResult will be updated by importLayoutFromFile)
+                // The ImportResultDialog will show the final success/failure.
+                // We can update the status message here for intermediate feedback.
+                // Note: importLayoutFromFile is async, so importResult might not be updated *immediately*.
+                // We rely on the ImportResultDialog showing the final state.
+                _importFromPcStatusMessage.value = "Import processing complete. Check result dialog." // Indicate processing finished
 
             } catch (e: Exception) {
                 Log.e(_tag, "Error handling received layout JSON", e)
                 _importFromPcStatusMessage.value = "Error processing import: ${e.localizedMessage}"
                 _importResult.value = ImportResult.Failure("Error processing import: ${e.localizedMessage}")
             } finally {
-                // 4. Clean up the temporary file
-                tempFileUri?.path?.let { path ->
-                    val fileToDelete = File(path)
+                // 4. Stop the Ktor server
+                pcImportWebServer.stopServer()
+                Log.d(_tag, "Stopped Ktor server after handling JSON.")
+
+                // 5. Clean up the temporary file
+                tempFile?.let { fileToDelete ->
                     if (fileToDelete.exists()) {
                         if (fileToDelete.delete()) {
-                            Log.d(_tag, "Deleted temporary import file: $path")
+                            Log.d(_tag, "Deleted temporary import file: ${fileToDelete.path}")
                         } else {
-                            Log.w(_tag, "Failed to delete temporary import file: $path")
+                            Log.w(_tag, "Failed to delete temporary import file: ${fileToDelete.path}")
                         }
                     }
                 }
-                // 5. Stop the Ktor server (implementation needed)
-                // TODO: Call Ktor server stop function
-                Log.d(_tag, "Stopping Ktor server (placeholder)")
-                // Optionally close the dialog after a delay or keep it open with the result
-                // For now, let the user close it via the dialog's button (when implemented)
+                // Dialog remains open until user dismisses it or ImportResultDialog shows up
             }
         }
     }
@@ -405,11 +408,21 @@ class ManageLayoutsViewModel @Inject constructor(
     /** Cancels the Import from PC process. */
     fun cancelPcImport() {
         Log.d(_tag, "Cancelling Import from PC")
-        // TODO: Stop Ktor server (implementation needed)
+        viewModelScope.launch {
+            pcImportWebServer.stopServer() // Stop the Ktor server
+        }
         _showImportFromPcDialog.value = false
         _importFromPcStatusMessage.value = null
-        // TODO: Optionally send cancellation message to PC server via ConnectionManager
+        // TODO: (Optional) Send cancellation message to PC server via ConnectionManager if needed
     }
     // --- End Import from PC Functions ---
 
+    /** Ensure Ktor server is stopped when ViewModel is cleared */
+    override fun onCleared() {
+        super.onCleared()
+        Log.d(_tag, "ManageLayoutsViewModel cleared. Stopping Ktor server if running.")
+        viewModelScope.launch {
+            pcImportWebServer.stopServer()
+        }
+    }
 }
