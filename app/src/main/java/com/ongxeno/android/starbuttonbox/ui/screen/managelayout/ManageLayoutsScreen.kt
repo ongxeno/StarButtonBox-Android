@@ -1,6 +1,7 @@
 package com.ongxeno.android.starbuttonbox.ui.screen.managelayout
 
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
@@ -85,7 +86,9 @@ fun ManageLayoutsScreen(
     val layoutToEdit by viewModel.layoutToEditState
     val importResult by viewModel.importResultState.collectAsStateWithLifecycle()
     val connectionStatus by viewModel.connectionStatusState.collectAsStateWithLifecycle()
+
     val showImportFromPcDialog by viewModel.showImportFromPcDialogState.collectAsStateWithLifecycle()
+    Log.d("ManageLayoutsScreen", "Recomposing. showImportFromPcDialog = $showImportFromPcDialog")
 
     val density = LocalDensity.current.density
     val context = LocalContext.current

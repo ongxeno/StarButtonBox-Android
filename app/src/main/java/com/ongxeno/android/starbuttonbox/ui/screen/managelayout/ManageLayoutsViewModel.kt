@@ -356,7 +356,15 @@ class ManageLayoutsViewModel @Inject constructor(
     /** Handles the JSON content received from the Ktor server. */
     private fun handleReceivedLayoutJson(jsonContent: String) {
         Log.d(_tag, "Handling received layout JSON from PC (Size: ${jsonContent.length})")
+
+        // --- Set status message and dismiss IMMEDIATELY ---
+        // Update status first
         _importFromPcStatusMessage.value = "Processing imported layout..."
+        // Then immediately set the flag to dismiss the ImportFromPcDialog
+        // This ensures the UI knows to hide the progress dialog BEFORE starting the import work.
+        _showImportFromPcDialog.value = false
+        Log.d(_tag, "Set showImportFromPcDialog to false. Value: ${_showImportFromPcDialog.value}")
+        // --- End Immediate Dismiss ---
 
         viewModelScope.launch { // Perform file operations and import off the main thread
             var tempFileUri: Uri? = null
@@ -391,15 +399,6 @@ class ManageLayoutsViewModel @Inject constructor(
                 pcImportWebServer.stopServer()
                 Log.d(_tag, "Stopped Ktor server after handling JSON.")
 
-                _showImportFromPcDialog.value = false
-                _showImportFromPcDialog.value = true
-                _showImportFromPcDialog.value = false
-                _showImportFromPcDialog.value = false
-                _showImportFromPcDialog.value = false
-                _showImportFromPcDialog.value = false
-                _showImportFromPcDialog.value = false
-                _showImportFromPcDialog.value = false
-                _showImportFromPcDialog.value = false
                 _importFromPcStatusMessage.value = null
 
                 // 5. Clean up the temporary file

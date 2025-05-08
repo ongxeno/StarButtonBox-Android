@@ -445,10 +445,10 @@ class ConnectionManager @Inject constructor(
             if (config.ip != null && config.port != null) restartSocketAndJobs()
             return false
         }
-        if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
+        /*if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
             Log.w(TAG, "Cannot send TRIGGER_IMPORT_BROWSER, connection status is ${_connectionStatus.value}")
             return false
-        }
+        }*/
 
         // Create the specific payload for this packet type
         val payload = TriggerImportPayload(url = url)

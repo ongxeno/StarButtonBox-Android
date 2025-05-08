@@ -41,58 +41,55 @@ fun ImportFromPcDialog(
 ) {
     // Collect the necessary state from the ViewModel
     val statusMessage by viewModel.importFromPcStatusMessageState.collectAsStateWithLifecycle()
-    val showImportFromPcDialog by viewModel.showImportFromPcDialogState.collectAsStateWithLifecycle()
 
-    if (showImportFromPcDialog) {
-        Dialog(
-            onDismissRequest = { /* Dialog is not dismissible by clicking outside or back press */ },
-            properties = DialogProperties(
-                dismissOnBackPress = false, // Cannot dismiss with back button
-                dismissOnClickOutside = false // Cannot dismiss by clicking outside
-            )
+    Dialog(
+        onDismissRequest = { /* Dialog is not dismissible by clicking outside or back press */ },
+        properties = DialogProperties(
+            dismissOnBackPress = false, // Cannot dismiss with back button
+            dismissOnClickOutside = false // Cannot dismiss by clicking outside
+        )
+    ) {
+        Card(
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp) // Padding around the card
         ) {
-            Card(
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp) // Padding around the card
+            Column(
+                modifier = Modifier.padding(24.dp), // Padding inside the card
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp), // Padding inside the card
-                    horizontalAlignment = Alignment.CenterHorizontally
+                // --- Title ---
+                Text(
+                    text = "Import Layout from PC",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // --- Status Display ---
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 16.dp)
                 ) {
-                    // --- Title ---
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
                     Text(
-                        text = "Import Layout from PC",
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        text = statusMessage ?: "Initializing...", // Show default if null
+                        style = MaterialTheme.typography.bodyMedium
                     )
+                }
 
-                    // --- Status Display ---
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 16.dp)
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // --- Action Button (Cancel) ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = { viewModel.cancelPcImport() } // Call cancel function on ViewModel
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = statusMessage ?: "Initializing...", // Show default if null
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // --- Action Button (Cancel) ---
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.cancelPcImport() } // Call cancel function on ViewModel
-                        ) {
-                            Text("Cancel")
-                        }
+                        Text("Cancel")
                     }
                 }
             }

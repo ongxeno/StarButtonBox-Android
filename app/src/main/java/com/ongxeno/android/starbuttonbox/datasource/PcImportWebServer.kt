@@ -65,8 +65,6 @@ class PcImportWebServer @Inject constructor(
             }
         }
 
-        stopServerInternal() // Ensure clean state
-
         val ipAddress = getWifiIpAddress()
         if (ipAddress == null) {
             Log.e(TAG, "Failed to get device Wi-Fi IP address. Cannot start server.")
