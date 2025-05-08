@@ -82,6 +82,10 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // Ktor
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.netty)
+
     // Testing (using your existing aliases)
     testImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.junit)

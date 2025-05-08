@@ -25,6 +25,9 @@ room = "2.6.1"
 # Kotlinx Libraries
 kotlinxSerialization = "1.8.1"  # Latest stable serialization runtime [31]
 
+# Ktor
+ktor = "2.3.10"
+
 # Testing
 junit5 = "5.12.2"               # Latest stable JUnit 5 [25]
 androidxTestJunit = "1.2.1"     # Latest stable AndroidX Test JUnit runner [27]
@@ -79,6 +82,10 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" } # Version managed by BOM
 # Room Testing
 androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
+
+# Ktor Server
+ktor-server-core = { group = "io.ktor", name = "ktor-server-core-jvm", version.ref = "ktor" }
+ktor-server-netty = { group = "io.ktor", name = "ktor-server-netty-jvm", version.ref = "ktor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
