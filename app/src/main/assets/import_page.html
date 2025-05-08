@@ -152,6 +152,9 @@
         statusDiv.textContent = 'Importing...';
         statusDiv.className = '';
 
+        const countdownSeconds = 5;
+        let remainingSeconds = countdownSeconds;
+
         try {
             const response = await fetch('/upload', { // POST to the relative path /upload
                 method: 'POST',
@@ -164,8 +167,21 @@
             const resultText = await response.text(); // Get text response from server
 
             if (response.ok) {
-                statusDiv.textContent = `Import successful: ${resultText}`;
+                statusDiv.textContent = `Success! This window will close in ${remainingSeconds} seconds...`;
                 statusDiv.className = 'success';
+
+                const countdownInterval = setInterval(() => {
+                        remainingSeconds--;
+                        if (remainingSeconds > 0) {
+                            statusDiv.textContent = `Success! This window will close in ${remainingSeconds} seconds...`;
+                        } else {
+                            clearInterval(countdownInterval);
+                            statusDiv.textContent = 'Closing window...';
+                            console.log('Countdown finished. Attempting to close window...');
+                            window.close();
+                        }
+                    }, 1000);
+
             } else {
                 statusDiv.textContent = `Import failed: ${resultText || response.statusText}`;
                 statusDiv.className = 'error';
