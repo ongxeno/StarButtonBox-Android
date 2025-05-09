@@ -24,12 +24,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToLong
 
-private const val HEALTH_CHECK_INTERVAL_MS = 10000L
-private const val PING_TIMEOUT_MS = 2000L
-private const val MACRO_ACK_TIMEOUT_MS = 2000L
-private const val MAX_FAILED_HEALTH_CHECKS = 3
-private const val MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED = 2
-private const val UDP_RECEIVE_BUFFER_SIZE = 2048
+private const val DEFAULT_HEALTH_CHECK_INTERVAL_MS = 10000L // Default interval
+private const val FAST_HEALTH_CHECK_INTERVAL_MS = 2000L    // Faster interval for reconnecting states
+private const val PING_TIMEOUT_MS = 2000L         // Timeout for waiting for PONG
+private const val MACRO_ACK_TIMEOUT_MS = 2000L      // Timeout for waiting for MACRO_ACK
+private const val MAX_FAILED_HEALTH_CHECKS = 3    // Threshold to declare connection lost
+private const val MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED = 2 // Threshold to declare connected
+private const val UDP_RECEIVE_BUFFER_SIZE = 2048  // Buffer size for incoming packets
 
 // --- New Constant for Sliding Window ---
 private const val RESPONSE_TIME_WINDOW_SIZE = 5 // Number of latency samples to average
@@ -79,7 +80,7 @@ class ConnectionManager @Inject constructor(
 
                 if (config?.ip != null && config.port != null) {
                     if (oldConfig?.ip != config.ip || oldConfig?.port != config.port || udpSocket == null || udpSocket!!.isClosed) {
-                        Log.i(TAG, "Network config changed or socket not ready. Restarting connection components.")
+                        Log.i(TAG, "Network config changed or socket not ready. Restartinyyyyyyyg connection components.")
                         _connectionStatus.value = ConnectionStatus.CONNECTING
                         resetResponseTimeTracking() // Reset response time on config change
                         restartSocketAndJobs()
@@ -243,17 +244,14 @@ class ConnectionManager @Inject constructor(
                 if (pingSendTime != null) {
                     val rtt = clientReceiveTime - pingSendTime
                     val oneWayLatency = (rtt.toDouble() / 2.0).roundToLong()
-                    if (oneWayLatency >= 0) { // Ensure non-negative latency
+                    if (oneWayLatency >= 0) {
                         updateAverageResponseTime(oneWayLatency)
                         Log.i(TAG, "HEALTH_CHECK_PONG received for ID: ${packet.packetId}. Latency: $oneWayLatency ms (PONG_ts: ${packet.timestamp}, PING_ts: $pingSendTime)")
                     } else {
-                        // This case might happen due to clock differences or network quirks.
-                        // Could log as warning or use RTT/2 as a fallback.
-                        // For now, just log and don't update if negative.
                         Log.w(TAG, "Calculated negative latency for PONG ID ${packet.packetId} ($oneWayLatency ms). PONG_ts: ${packet.timestamp}, PING_ts: $pingSendTime. Not updating response time.")
                     }
 
-                    _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis() // Client's current time
+                    _lastSuccessfulHealthCheckTime.value = clientReceiveTime
                     _consecutiveFailedHealthChecks.value = 0
                     _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
 
@@ -268,7 +266,6 @@ class ConnectionManager @Inject constructor(
                 }
             }
             UdpPacketType.MACRO_ACK -> {
-                // 2. Use MACRO_ACK to calculate response time
                 val commandSendTime = pendingMacroAcks.remove(packet.packetId)
                 if (commandSendTime != null) {
                     val rtt = clientReceiveTime - commandSendTime
@@ -299,34 +296,50 @@ class ConnectionManager @Inject constructor(
                     Log.w(TAG, "Received ACK for unknown or timed-out MACRO_COMMAND ID: ${packet.packetId}")
                 }
             }
-            // Ignore TRIGGER_IMPORT_BROWSER on receive side for now
             UdpPacketType.TRIGGER_IMPORT_BROWSER -> {
                  Log.d(TAG, "Received TRIGGER_IMPORT_BROWSER packet (ignoring on client). ID: ${packet.packetId}")
             }
-            // Added HEALTH_CHECK_PING case
             UdpPacketType.HEALTH_CHECK_PING -> {
                  Log.d(TAG, "Received HEALTH_CHECK_PING packet (ignoring on client). ID: ${packet.packetId}")
             }
-            // Added MACRO_COMMAND case
             UdpPacketType.MACRO_COMMAND -> {
                  Log.d(TAG, "Received MACRO_COMMAND packet (ignoring on client). ID: ${packet.packetId}")
             }
         }
     }
 
+    /**
+     * Starts the periodic health check job.
+     * The interval for health checks is now dynamic based on the connection status.
+     */
     private fun startHealthChecks() {
         if (healthCheckJob?.isActive == true) return
-        Log.d(TAG, "Starting health check job.")
+        Log.d(TAG, "Starting health check job with dynamic interval.")
         healthCheckJob = appScope.launch(Dispatchers.IO) {
             while (isActive) {
-                delay(HEALTH_CHECK_INTERVAL_MS)
+                // Determine the delay interval based on the current connection status
+                val currentStatus = _connectionStatus.value
+                val delayInterval = when (currentStatus) {
+                    ConnectionStatus.CONNECTING,
+                    ConnectionStatus.CONNECTION_LOST -> FAST_HEALTH_CHECK_INTERVAL_MS
+                    else -> DEFAULT_HEALTH_CHECK_INTERVAL_MS
+                }
+                Log.v(TAG, "Health check delay interval: $delayInterval ms (Status: $currentStatus)")
+                delay(delayInterval)
+
                 val config = currentNetworkConfig
+                // Check if we should send a ping (valid config, socket ready)
                 if (config?.ip != null && config.port != null && udpSocket != null && !udpSocket!!.isClosed) {
                     sendHealthCheckPing()
-                } else if (udpSocket == null || udpSocket!!.isClosed) {
+                }
+                // If socket is bad, attempt restart
+                else if (udpSocket == null || udpSocket!!.isClosed) {
                     Log.w(TAG, "Health check: UDP socket is null or closed. Attempting to restart connection components.")
                     if (config?.ip != null && config.port != null){
-                        restartSocketAndJobs()
+                        restartSocketAndJobs() // Attempt restart
+                    } else {
+                         Log.w(TAG, "Health check: Cannot restart, config is invalid.")
+                         // Status should already be NO_CONFIG due to config flow collector
                     }
                 }
             }
