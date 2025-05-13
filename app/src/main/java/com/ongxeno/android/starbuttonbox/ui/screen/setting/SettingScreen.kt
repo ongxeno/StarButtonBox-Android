@@ -144,13 +144,13 @@ fun SettingsScreen(
             SettingsSection(title = "Key Binding") {
                 Button(
                     onClick = onNavigateToManageMacros,
-                    enabled = false
+                    enabled = true
                 ) {
-                    Text("Configure Key Bindings (TODO)")
+                    Text("Configure Key Bindings")
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp)) // Add some space at the bottom
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         if (showConnectionDialog) {

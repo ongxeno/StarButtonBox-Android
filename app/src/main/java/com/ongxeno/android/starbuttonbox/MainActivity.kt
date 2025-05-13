@@ -126,6 +126,25 @@ class MainActivity : ComponentActivity() {
                         ManageLayoutsScreen(
                             onNavigateBack = { navController.popBackStack() })
                     }
+                    composable(
+                        AppScreenRoute.ManageMacros.route,
+                        // Animation: When entering ManageMacros FROM Settings
+                        enterTransition = {
+                            slideInHorizontally(
+                                initialOffsetX = { fullWidth -> fullWidth }, // Slide in from Right
+                                animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
+                            )
+                        },
+                        // Animation: When leaving ManageMacros TO Settings (Back)
+                        popExitTransition = {
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> fullWidth }, // Slide out to Right
+                                animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
+                            )
+                        }
+                    ) {
+                        com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout(title = "Manage Macros Screen (WIP)")
+                    }
                 }
             }
         }
