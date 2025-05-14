@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import com.ongxeno.android.starbuttonbox.navigation.AppScreenRoute
 import com.ongxeno.android.starbuttonbox.ui.screen.main.MainScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.ManageLayoutsScreen
+import com.ongxeno.android.starbuttonbox.ui.screen.managemacros.ManageMacrosScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.setting.SettingViewModel
 import com.ongxeno.android.starbuttonbox.ui.screen.setting.SettingsScreen
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
@@ -143,7 +144,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     ) {
-                        com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout(title = "Manage Macros Screen (WIP)")
+                        ManageMacrosScreen(
+                            onNavigateBack = { navController.popBackStack() }
+                        )
                     }
                 }
             }
