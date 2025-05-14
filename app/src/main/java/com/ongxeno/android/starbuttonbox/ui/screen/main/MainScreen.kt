@@ -1,7 +1,7 @@
 package com.ongxeno.android.starbuttonbox.ui.screen.main
 
 import android.annotation.SuppressLint
-import androidx.compose.animation.AnimatedContent // Import AnimatedContent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.SizeTransform
@@ -69,6 +69,7 @@ import com.ongxeno.android.starbuttonbox.data.ConnectionStatus
 import com.ongxeno.android.starbuttonbox.data.LayoutType
 import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
+import com.ongxeno.android.starbuttonbox.ui.layout.AutoDragAndDropLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.DemoLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.FreeFormLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
@@ -87,7 +88,6 @@ fun MainScreen(
     val showMainAddLayoutDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
 
     val connectionStatus by viewModel.connectionStatus.collectAsStateWithLifecycle()
-    // --- Collect latestResponseTimeMs ---
     val latestResponseTimeMs by viewModel.latestResponseTimeMs.collectAsStateWithLifecycle()
 
     Surface(
@@ -148,14 +148,12 @@ fun MainScreen(
                         }
                     }
 
-                    // --- Response Time Indicator ---
                     ResponseTimeIndicator(
                         responseTimeMs = latestResponseTimeMs,
-                        connectionStatus = connectionStatus // Pass status to hide when no config/lost
+                        connectionStatus = connectionStatus
                     )
 
                     ConnectionStatusIndicator(status = connectionStatus)
-                    // Spacer(modifier = Modifier.width(4.dp)) // Adjusted below
 
                     IconButton(
                         onClick = navigateToSettings,
@@ -187,6 +185,7 @@ fun MainScreen(
                         LayoutType.NORMAL_FLIGHT -> NormalFlightLayout(hiltViewModel())
                         LayoutType.FREE_FORM -> FreeFormLayout(viewModel, hiltViewModel())
                         LayoutType.DEMO -> DemoLayout()
+                        LayoutType.AUTO_DRAG_AND_DROP -> AutoDragAndDropLayout(hiltViewModel()) // Added new case
                         LayoutType.PLACEHOLDER -> PlaceholderLayout("Layout: ${layoutInfo.id}")
                         else -> PlaceholderLayout("No Layouts Enabled")
                     }
@@ -215,7 +214,7 @@ fun MainScreen(
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class) // For AnimatedContent
+@OptIn(ExperimentalAnimationApi::class)
 @SuppressLint("UnusedContentLambdaTargetStateParameter")
 @Composable
 fun ResponseTimeIndicator(
@@ -226,54 +225,51 @@ fun ResponseTimeIndicator(
     val placeholderText = "--"
     val unitText = "ms"
 
-    // Determine the text to display for the value and unit
     val displayValue: String
     val displayUnit: String
 
     when {
         connectionStatus == ConnectionStatus.NO_CONFIG || connectionStatus == ConnectionStatus.CONNECTION_LOST -> {
             displayValue = placeholderText
-            displayUnit = "" // No unit when placeholder
+            displayUnit = ""
         }
         responseTimeMs != null -> {
             displayValue = responseTimeMs.toString()
             displayUnit = unitText
         }
-        else -> { // CONNECTING or SENDING_PENDING_ACK without a responseTimeMs yet
+        else -> {
             displayValue = placeholderText
-            displayUnit = "" // No unit for placeholder
+            displayUnit = ""
         }
     }
 
-    // Use a key for AnimatedContent that changes when either displayValue or displayUnit changes
-    // This ensures the animation runs if either part of the text content changes.
     val animationKey = displayValue + displayUnit
 
     Box(
         modifier = Modifier
-            .size(width = 56.dp, height = 48.dp) // Similar dimension to IconButton
-            .padding(horizontal = 4.dp), // Some padding
+            .size(width = 56.dp, height = 48.dp)
+            .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = displayValue,
                 color = tintColor,
-                fontSize = 14.sp, // Larger size for the number
+                fontSize = 14.sp,
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Black,
                 textAlign = TextAlign.Center,
-                lineHeight = 16.sp // Adjust if needed
+                lineHeight = 16.sp
             )
             if (displayUnit.isNotEmpty()) {
                 Text(
                     text = displayUnit,
                     color = tintColor,
-                    fontSize = 10.sp, // Smaller size for "ms"
+                    fontSize = 10.sp,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
-                    lineHeight = 8.sp // Adjust if needed
+                    lineHeight = 8.sp
                 )
             }
         }
@@ -331,3 +327,4 @@ fun ConnectionStatusIndicator(status: ConnectionStatus) {
         }
     }
 }
+
