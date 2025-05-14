@@ -8,5 +8,6 @@ enum class LayoutType {
     NORMAL_FLIGHT,
     FREE_FORM,
     DEMO,
-    PLACEHOLDER
+    PLACEHOLDER,
+    AUTO_DRAG_AND_DROP
 }

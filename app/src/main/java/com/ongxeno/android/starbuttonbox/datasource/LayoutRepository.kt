@@ -374,7 +374,8 @@ class LayoutRepository @Inject constructor(
     // --- Default Data ---
 
     private fun getDefaultLayoutOrderIds(): List<String> = listOf(
-        "normal_flight"
+        "normal_flight",
+        "auto_drag_drop" // Add new layout ID to the default order
     )
 
     private fun getDefaultLayoutDefinitions(): Map<String, LayoutDefinition> = mapOf(
@@ -383,6 +384,14 @@ class LayoutRepository @Inject constructor(
             title = "Normal Flight",
             layoutType = LayoutType.NORMAL_FLIGHT,
             iconName = "Rocket",
+            isEnabled = false,
+            isDeletable = false
+        ),
+        "auto_drag_drop" to LayoutDefinition( // New layout definition
+            id = "auto_drag_drop",
+            title = "Auto Drag & Drop",
+            layoutType = LayoutType.AUTO_DRAG_AND_DROP,
+            iconName = "Mouse",
             isEnabled = false,
             isDeletable = false
         )

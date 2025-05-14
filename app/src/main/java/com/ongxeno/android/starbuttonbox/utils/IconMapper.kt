@@ -38,17 +38,20 @@ object IconMapper {
         "Videocam" to Icons.Filled.Videocam,
         "Warning" to Icons.Filled.Warning,
         "WbSunny" to Icons.Filled.WbSunny,
-        "Recycling" to Icons.Filled.Recycling, // Added from defaults
-        "Diamond" to Icons.Filled.Diamond, // Added from defaults
-        "LocalFireDepartment" to Icons.Filled.LocalFireDepartment, // Added from defaults
-        "Rocket" to Icons.Filled.RocketLaunch, // Added from defaults (using RocketLaunch)
-        "Construction" to Icons.Filled.Construction, // Added from defaults
-        "HelpOutline" to Icons.AutoMirrored.Filled.HelpOutline // Use AutoMirrored version
+        "Recycling" to Icons.Filled.Recycling,
+        "Diamond" to Icons.Filled.Diamond,
+        "LocalFireDepartment" to Icons.Filled.LocalFireDepartment,
+        "Rocket" to Icons.Filled.RocketLaunch,
+        "Construction" to Icons.Filled.Construction,
+        "Mouse" to Icons.Filled.Mouse,
+        "DragHandle" to Icons.Filled.DragHandle,
+        "MultipleStop" to Icons.Filled.MultipleStop,
+        "HelpOutline" to Icons.AutoMirrored.Filled.HelpOutline
         // Add any other icons you want to support here
     )
 
     // Provide the list of available icons for selection UI
-    val availableIcons: List<ImageVector> = iconMap.values.toList()
+    val availableIcons: List<ImageVector> = iconMap.values.toList().distinct()
 
     // Default icon name and vector
     private const val DEFAULT_ICON_NAME = "HelpOutline"
