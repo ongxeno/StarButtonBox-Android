@@ -2,6 +2,8 @@ package com.ongxeno.android.starbuttonbox.datasource
 
 import android.content.Context
 import android.util.Log
+import com.ongxeno.android.starbuttonbox.data.AutoDragLoopPayload
+import com.ongxeno.android.starbuttonbox.data.CaptureMousePayload
 import com.ongxeno.android.starbuttonbox.data.ConnectionStatus
 import com.ongxeno.android.starbuttonbox.data.NetworkConfig
 import com.ongxeno.android.starbuttonbox.data.TriggerImportPayload
@@ -31,8 +33,6 @@ private const val MACRO_ACK_TIMEOUT_MS = 2000L      // Timeout for waiting for M
 private const val MAX_FAILED_HEALTH_CHECKS = 3    // Threshold to declare connection lost
 private const val MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED = 2 // Threshold to declare connected
 private const val UDP_RECEIVE_BUFFER_SIZE = 2048  // Buffer size for incoming packets
-
-// --- New Constant for Sliding Window ---
 private const val RESPONSE_TIME_WINDOW_SIZE = 5 // Number of latency samples to average
 
 @Singleton
@@ -53,14 +53,10 @@ class ConnectionManager @Inject constructor(
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NO_CONFIG)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
-    // --- New: StateFlow for latest response time ---
     private val _latestResponseTimeMs = MutableStateFlow<Long?>(null)
     val latestResponseTimeMs: StateFlow<Long?> = _latestResponseTimeMs.asStateFlow()
 
-    // Storage for the sliding window of recent latency values
     private val recentLatencyValues = mutableListOf<Long>()
-
-    // Current network configuration
     private var currentNetworkConfig: NetworkConfig? = null
 
     private val _lastSuccessfulHealthCheckTime = MutableStateFlow<Long?>(null)
@@ -80,62 +76,44 @@ class ConnectionManager @Inject constructor(
 
                 if (config?.ip != null && config.port != null) {
                     if (oldConfig?.ip != config.ip || oldConfig?.port != config.port || udpSocket == null || udpSocket!!.isClosed) {
-                        Log.i(TAG, "Network config changed or socket not ready. Restartinyyyyyyyg connection components.")
+                        Log.i(TAG, "Network config changed or socket not ready. Restarting connection components.")
                         _connectionStatus.value = ConnectionStatus.CONNECTING
-                        resetResponseTimeTracking() // Reset response time on config change
+                        resetResponseTimeTracking()
                         restartSocketAndJobs()
                     } else if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
                         Log.i(TAG, "Valid network config present, attempting to connect/reconnect. Status -> CONNECTING")
                         _connectionStatus.value = ConnectionStatus.CONNECTING
-                        resetResponseTimeTracking() // Reset on reconnect attempt
+                        resetResponseTimeTracking()
                     }
                 } else {
                     Log.w(TAG, "Invalid or missing network config. Setting status to NO_CONFIG.")
                     _connectionStatus.value = ConnectionStatus.NO_CONFIG
-                    resetResponseTimeTracking() // No connection, no response time
+                    resetResponseTimeTracking()
                     stopSocketAndJobs()
                 }
             }
         }
     }
 
-    /**
-     * Updates the sliding window with a new latency value and recalculates the average.
-     * Updates the `_latestResponseTimeMs` StateFlow.
-     * This function is synchronized to ensure thread safety.
-     *
-     * @param newLatency The newly calculated estimated one-way latency (must be non-negative).
-     */
-    @Synchronized // Ensure thread safety when modifying the list and calculating average
+    @Synchronized
     private fun updateAverageResponseTime(newLatency: Long) {
         if (newLatency < 0) {
             Log.w(TAG, "Attempted to add negative latency ($newLatency ms) to average. Ignoring.")
-            return // Ignore invalid negative latency
+            return
         }
-
         recentLatencyValues.add(newLatency)
-
-        // Maintain window size by removing the oldest value if necessary
         while (recentLatencyValues.size > RESPONSE_TIME_WINDOW_SIZE) {
             recentLatencyValues.removeAt(0)
         }
-
-        // Calculate and update the average response time StateFlow
         if (recentLatencyValues.isNotEmpty()) {
             val average = recentLatencyValues.average().roundToLong()
             _latestResponseTimeMs.value = average
-            // Verbose log to see the calculation details
             Log.v(TAG,"Updated average latency: $average ms (Window: $recentLatencyValues)")
         } else {
-            // If the list becomes empty (e.g., after reset), set average to null
             _latestResponseTimeMs.value = null
         }
     }
 
-    /**
-     * Resets the response time tracking by clearing the history and setting the average to null.
-     * This function is synchronized.
-     */
     @Synchronized
     private fun resetResponseTimeTracking() {
         if (recentLatencyValues.isNotEmpty() || _latestResponseTimeMs.value != null) {
@@ -148,7 +126,6 @@ class ConnectionManager @Inject constructor(
     private fun restartSocketAndJobs() {
         Log.d(TAG, "Restarting socket and all jobs...")
         stopSocketAndJobs()
-
         val config = currentNetworkConfig
         if (config?.ip == null || config.port == null) {
             Log.w(TAG, "Cannot restart socket and jobs, network config is invalid.")
@@ -156,16 +133,13 @@ class ConnectionManager @Inject constructor(
             _latestResponseTimeMs.value = null
             return
         }
-
         try {
             udpSocket = DatagramSocket()
             Log.i(TAG, "UDP Socket created and bound to local port: ${udpSocket?.localPort}")
-
             startListener()
             startHealthChecks()
             startPingTimeoutChecker()
             startAckTimeoutChecker()
-
             if (_connectionStatus.value != ConnectionStatus.CONNECTING && _connectionStatus.value != ConnectionStatus.SENDING_PENDING_ACK) {
                 _connectionStatus.value = ConnectionStatus.CONNECTING
             }
@@ -187,14 +161,12 @@ class ConnectionManager @Inject constructor(
         healthCheckJob = null
         pingTimeoutJob = null
         ackTimeoutJob = null
-
         pendingPings.clear()
         pendingMacroAcks.clear()
         _consecutiveFailedHealthChecks.value = 0
         _consecutiveSuccessfulHealthChecks.value = 0
         _lastSuccessfulHealthCheckTime.value = null
-        resetResponseTimeTracking() // Reset response time when stopping
-
+        resetResponseTimeTracking()
         try {
             udpSocket?.close()
             Log.d(TAG, "UDP Socket closed.")
@@ -250,11 +222,9 @@ class ConnectionManager @Inject constructor(
                     } else {
                         Log.w(TAG, "Calculated negative latency for PONG ID ${packet.packetId} ($oneWayLatency ms). PONG_ts: ${packet.timestamp}, PING_ts: $pingSendTime. Not updating response time.")
                     }
-
                     _lastSuccessfulHealthCheckTime.value = clientReceiveTime
                     _consecutiveFailedHealthChecks.value = 0
                     _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
-
                     if (_consecutiveSuccessfulHealthChecks.value >= MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED &&
                         _connectionStatus.value != ConnectionStatus.CONNECTED &&
                         _connectionStatus.value != ConnectionStatus.SENDING_PENDING_ACK) {
@@ -276,11 +246,9 @@ class ConnectionManager @Inject constructor(
                     } else {
                         Log.w(TAG, "Calculated negative latency for ACK ID ${packet.packetId} ($oneWayLatency ms). ACK_ts: ${packet.timestamp}, CMD_ts: $commandSendTime. Not updating response time.")
                     }
-
                     _lastSuccessfulHealthCheckTime.value = System.currentTimeMillis()
                     _consecutiveFailedHealthChecks.value = 0
                     _consecutiveSuccessfulHealthChecks.value = (_consecutiveSuccessfulHealthChecks.value + 1).coerceAtMost(MIN_SUCCESSFUL_HEALTH_CHECKS_FOR_CONNECTED + 1)
-
                     if (pendingMacroAcks.isEmpty()) {
                         if (_connectionStatus.value == ConnectionStatus.SENDING_PENDING_ACK || _connectionStatus.value == ConnectionStatus.CONNECTING) {
                             Log.i(TAG, "All MACRO_ACKs received or single ACK restored connection. Status -> CONNECTED")
@@ -296,28 +264,22 @@ class ConnectionManager @Inject constructor(
                     Log.w(TAG, "Received ACK for unknown or timed-out MACRO_COMMAND ID: ${packet.packetId}")
                 }
             }
-            UdpPacketType.TRIGGER_IMPORT_BROWSER -> {
-                 Log.d(TAG, "Received TRIGGER_IMPORT_BROWSER packet (ignoring on client). ID: ${packet.packetId}")
-            }
-            UdpPacketType.HEALTH_CHECK_PING -> {
-                 Log.d(TAG, "Received HEALTH_CHECK_PING packet (ignoring on client). ID: ${packet.packetId}")
-            }
-            UdpPacketType.MACRO_COMMAND -> {
-                 Log.d(TAG, "Received MACRO_COMMAND packet (ignoring on client). ID: ${packet.packetId}")
+            // Client should not typically receive these from the server, but log if it does.
+            UdpPacketType.HEALTH_CHECK_PING,
+            UdpPacketType.MACRO_COMMAND,
+            UdpPacketType.TRIGGER_IMPORT_BROWSER,
+            UdpPacketType.CAPTURE_MOUSE_POSITION,
+            UdpPacketType.AUTO_DRAG_LOOP_COMMAND -> {
+                 Log.d(TAG, "Received unexpected packet type ${packet.type} from server (ID: ${packet.packetId}). Ignoring.")
             }
         }
     }
 
-    /**
-     * Starts the periodic health check job.
-     * The interval for health checks is now dynamic based on the connection status.
-     */
     private fun startHealthChecks() {
         if (healthCheckJob?.isActive == true) return
         Log.d(TAG, "Starting health check job with dynamic interval.")
         healthCheckJob = appScope.launch(Dispatchers.IO) {
             while (isActive) {
-                // Determine the delay interval based on the current connection status
                 val currentStatus = _connectionStatus.value
                 val delayInterval = when (currentStatus) {
                     ConnectionStatus.CONNECTING,
@@ -326,20 +288,15 @@ class ConnectionManager @Inject constructor(
                 }
                 Log.v(TAG, "Health check delay interval: $delayInterval ms (Status: $currentStatus)")
                 delay(delayInterval)
-
                 val config = currentNetworkConfig
-                // Check if we should send a ping (valid config, socket ready)
                 if (config?.ip != null && config.port != null && udpSocket != null && !udpSocket!!.isClosed) {
                     sendHealthCheckPing()
-                }
-                // If socket is bad, attempt restart
-                else if (udpSocket == null || udpSocket!!.isClosed) {
+                } else if (udpSocket == null || udpSocket!!.isClosed) {
                     Log.w(TAG, "Health check: UDP socket is null or closed. Attempting to restart connection components.")
                     if (config?.ip != null && config.port != null){
-                        restartSocketAndJobs() // Attempt restart
+                        restartSocketAndJobs()
                     } else {
                          Log.w(TAG, "Health check: Cannot restart, config is invalid.")
-                         // Status should already be NO_CONFIG due to config flow collector
                     }
                 }
             }
@@ -350,12 +307,10 @@ class ConnectionManager @Inject constructor(
     private fun sendHealthCheckPing() {
         val config = currentNetworkConfig ?: return
         val socket = udpSocket ?: return
-
         val pingPacket = UdpPacket(type = UdpPacketType.HEALTH_CHECK_PING)
         val packetId = pingPacket.packetId
         val sendTime = pingPacket.timestamp
         config.port ?: return
-
         try {
             val jsonData = json.encodeToString(pingPacket)
             val dataBytes = jsonData.toByteArray(Charsets.UTF_8)
@@ -391,10 +346,9 @@ class ConnectionManager @Inject constructor(
     private fun handlePingTimeout(packetId: String, isSendFailure: Boolean = false) {
         if (pendingPings.remove(packetId) != null || isSendFailure) {
             Log.w(TAG, "PING (ID: $packetId) timed out or send failed.")
-            resetResponseTimeTracking() // Clear response time on timeout
+            resetResponseTimeTracking()
             _consecutiveSuccessfulHealthChecks.value = 0
             _consecutiveFailedHealthChecks.value = (_consecutiveFailedHealthChecks.value + 1)
-
             if (_consecutiveFailedHealthChecks.value >= MAX_FAILED_HEALTH_CHECKS &&
                 _connectionStatus.value != ConnectionStatus.CONNECTION_LOST) {
                 Log.e(TAG, "Max failed health checks reached. Status -> CONNECTION_LOST")
@@ -432,18 +386,12 @@ class ConnectionManager @Inject constructor(
         if (pendingMacroAcks.remove(packetId) != null || isSendFailure) {
             Log.e(TAG, "MACRO_COMMAND (ID: $packetId) ACK timed out or send failed. Status -> CONNECTION_LOST")
             _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
-            resetResponseTimeTracking() // Clear response time
+            resetResponseTimeTracking()
             _consecutiveFailedHealthChecks.value = MAX_FAILED_HEALTH_CHECKS
             _consecutiveSuccessfulHealthChecks.value = 0
         }
     }
 
-    /**
-     * Sends a MACRO_COMMAND packet to the server.
-     *
-     * @param inputActionJson The serialized InputAction JSON string.
-     * @param macroTitle The title of the macro for logging purposes.
-     */
     fun sendMacroCommand(inputActionJson: String, macroTitle: String) {
         val config = currentNetworkConfig ?: run {
             Log.w(TAG, "Cannot send macro '$macroTitle', network config missing.")
@@ -456,16 +404,14 @@ class ConnectionManager @Inject constructor(
             if (config.ip != null && config.port != null) restartSocketAndJobs()
             return
         }
-
         val commandPacket = UdpPacket(
             type = UdpPacketType.MACRO_COMMAND,
             payload = inputActionJson,
-            timestamp = System.currentTimeMillis() // Client's send time for the command
+            timestamp = System.currentTimeMillis()
         )
         val packetId = commandPacket.packetId
         val sendTime = commandPacket.timestamp
         config.port ?: return
-
         appScope.launch(Dispatchers.IO) {
             try {
                 val jsonData = json.encodeToString(commandPacket)
@@ -477,7 +423,6 @@ class ConnectionManager @Inject constructor(
                 socket.send(datagramPacket)
                 pendingMacroAcks[packetId] = sendTime
                 Log.i(TAG, "Sent MACRO_COMMAND (ID: $packetId, Title: $macroTitle) to ${config.ip}:${config.port}")
-
                 if (_connectionStatus.value == ConnectionStatus.CONNECTED || _connectionStatus.value == ConnectionStatus.CONNECTING) {
                     _connectionStatus.value = ConnectionStatus.SENDING_PENDING_ACK
                 }
@@ -488,13 +433,6 @@ class ConnectionManager @Inject constructor(
         }
     }
 
-    /**
-     * Sends a TRIGGER_IMPORT_BROWSER packet to the server.
-     * This packet contains the URL for the PC browser to open.
-     *
-     * @param url The URL of the Ktor server running on the Android device.
-     * @return True if the packet was successfully queued for sending, false otherwise (e.g., no connection).
-     */
     fun sendTriggerImportBrowser(url: String): Boolean {
         val config = currentNetworkConfig ?: run {
             Log.w(TAG, "Cannot send TRIGGER_IMPORT_BROWSER, network config missing.")
@@ -507,30 +445,20 @@ class ConnectionManager @Inject constructor(
             if (config.ip != null && config.port != null) restartSocketAndJobs()
             return false
         }
-        /*if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
-            Log.w(TAG, "Cannot send TRIGGER_IMPORT_BROWSER, connection status is ${_connectionStatus.value}")
-            return false
-        }*/
-
-        // Create the specific payload for this packet type
         val payload = TriggerImportPayload(url = url)
         val payloadJson: String = try {
              json.encodeToString(payload)
         } catch (e: Exception) {
              Log.e(TAG, "Error serializing TriggerImportPayload", e)
-             return false // Cannot send if payload serialization fails
+             return false
         }
-
-        // Create the main UDP packet
         val triggerPacket = UdpPacket(
             type = UdpPacketType.TRIGGER_IMPORT_BROWSER,
             payload = payloadJson,
             timestamp = System.currentTimeMillis()
         )
         val packetId = triggerPacket.packetId
-        config.port ?: return false // Should not happen if config is valid, but check anyway
-
-        // Launch the sending operation in the background
+        config.port ?: return false
         appScope.launch(Dispatchers.IO) {
             try {
                 val jsonData = json.encodeToString(triggerPacket)
@@ -540,15 +468,127 @@ class ConnectionManager @Inject constructor(
                     InetAddress.getByName(config.ip), config.port
                 )
                 socket.send(datagramPacket)
-                // No ACK expected for this packet type, so don't add to pendingAcks
                 Log.i(TAG, "Sent TRIGGER_IMPORT_BROWSER (ID: $packetId, URL: $url) to ${config.ip}:${config.port}")
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending TRIGGER_IMPORT_BROWSER (ID: $packetId): ${e.message}", e)
-                // Optionally handle send failure, maybe retry or notify user?
-                // For now, just log the error. The ViewModel handles the user feedback.
             }
         }
-        return true // Indicate that the send operation was launched
+        return true
+    }
+
+    /**
+     * Sends a command to the server to capture the current mouse position.
+     *
+     * @param purpose A string indicating if this is for "SRC" (source) or "DES" (destination).
+     * @return True if the command was successfully queued for sending, false otherwise.
+     */
+    fun sendCaptureMousePositionCommand(purpose: String): Boolean {
+        val config = currentNetworkConfig ?: run {
+            Log.w(TAG, "Cannot send CAPTURE_MOUSE_POSITION, network config missing.")
+            _connectionStatus.value = ConnectionStatus.NO_CONFIG
+            return false
+        }
+        val socket = udpSocket ?: run {
+            Log.e(TAG, "Cannot send CAPTURE_MOUSE_POSITION, UDP socket is null.")
+            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
+            if (config.ip != null && config.port != null) restartSocketAndJobs()
+            return false
+        }
+         if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
+            Log.w(TAG, "Cannot send CAPTURE_MOUSE_POSITION, connection status is ${_connectionStatus.value}")
+            return false
+        }
+
+        val payload = CaptureMousePayload(purpose = purpose)
+        val payloadJson: String = try {
+            json.encodeToString(payload)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error serializing CaptureMousePayload for purpose '$purpose'", e)
+            return false
+        }
+
+        val capturePacket = UdpPacket(
+            type = UdpPacketType.CAPTURE_MOUSE_POSITION,
+            payload = payloadJson,
+            timestamp = System.currentTimeMillis()
+        )
+        val packetId = capturePacket.packetId
+        config.port ?: return false // Should be caught by earlier check
+
+        appScope.launch(Dispatchers.IO) {
+            try {
+                val jsonData = json.encodeToString(capturePacket)
+                val dataBytes = jsonData.toByteArray(Charsets.UTF_8)
+                val datagramPacket = DatagramPacket(
+                    dataBytes, dataBytes.size,
+                    InetAddress.getByName(config.ip), config.port
+                )
+                socket.send(datagramPacket)
+                // No ACK expected for this type, so not adding to pendingMacroAcks
+                Log.i(TAG, "Sent CAPTURE_MOUSE_POSITION (ID: $packetId, Purpose: $purpose) to ${config.ip}:${config.port}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending CAPTURE_MOUSE_POSITION (ID: $packetId, Purpose: $purpose): ${e.message}", e)
+                // Optionally handle send failure
+            }
+        }
+        return true
+    }
+
+    /**
+     * Sends a command to the server to start or stop the auto drag-and-drop loop.
+     *
+     * @param action A string indicating the action, "START" or "STOP".
+     * @return True if the command was successfully queued for sending, false otherwise.
+     */
+    fun sendAutoDragLoopCommand(action: String): Boolean {
+        val config = currentNetworkConfig ?: run {
+            Log.w(TAG, "Cannot send AUTO_DRAG_LOOP_COMMAND, network config missing.")
+            _connectionStatus.value = ConnectionStatus.NO_CONFIG
+            return false
+        }
+        val socket = udpSocket ?: run {
+            Log.e(TAG, "Cannot send AUTO_DRAG_LOOP_COMMAND, UDP socket is null.")
+            _connectionStatus.value = ConnectionStatus.CONNECTION_LOST
+            if (config.ip != null && config.port != null) restartSocketAndJobs()
+            return false
+        }
+        if (_connectionStatus.value == ConnectionStatus.NO_CONFIG || _connectionStatus.value == ConnectionStatus.CONNECTION_LOST) {
+            Log.w(TAG, "Cannot send AUTO_DRAG_LOOP_COMMAND, connection status is ${_connectionStatus.value}")
+            return false
+        }
+
+        val payload = AutoDragLoopPayload(action = action)
+        val payloadJson: String = try {
+            json.encodeToString(payload)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error serializing AutoDragLoopPayload for action '$action'", e)
+            return false
+        }
+
+        val loopCommandPacket = UdpPacket(
+            type = UdpPacketType.AUTO_DRAG_LOOP_COMMAND,
+            payload = payloadJson,
+            timestamp = System.currentTimeMillis()
+        )
+        val packetId = loopCommandPacket.packetId
+        config.port ?: return false
+
+        appScope.launch(Dispatchers.IO) {
+            try {
+                val jsonData = json.encodeToString(loopCommandPacket)
+                val dataBytes = jsonData.toByteArray(Charsets.UTF_8)
+                val datagramPacket = DatagramPacket(
+                    dataBytes, dataBytes.size,
+                    InetAddress.getByName(config.ip), config.port
+                )
+                socket.send(datagramPacket)
+                // No ACK expected for this type
+                Log.i(TAG, "Sent AUTO_DRAG_LOOP_COMMAND (ID: $packetId, Action: $action) to ${config.ip}:${config.port}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending AUTO_DRAG_LOOP_COMMAND (ID: $packetId, Action: $action): ${e.message}", e)
+            }
+        }
+        return true
     }
 
 

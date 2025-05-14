@@ -13,7 +13,10 @@ enum class UdpPacketType {
     HEALTH_CHECK_PONG, // Server to App
     MACRO_COMMAND,     // App to Server
     MACRO_ACK,         // Server to App
-    TRIGGER_IMPORT_BROWSER // App to Server (New)
+    TRIGGER_IMPORT_BROWSER, // App to Server
+    CAPTURE_MOUSE_POSITION, // App to Server - New for Auto Drag
+    AUTO_DRAG_LOOP_COMMAND  // App to Server - New for Auto Drag
+    // Optional: AUTO_DRAG_STATUS_UPDATE (Server to App) - Can be added later
 }
 
 /**
@@ -25,6 +28,8 @@ enum class UdpPacketType {
  * @param payload The actual data being sent, typically a JSON string.
  * For MACRO_COMMAND, this will be the serialized InputAction.
  * For TRIGGER_IMPORT_BROWSER, this will be the serialized TriggerImportPayload.
+ * For CAPTURE_MOUSE_POSITION, this will be the serialized CaptureMousePayload.
+ * For AUTO_DRAG_LOOP_COMMAND, this will be the serialized AutoDragLoopPayload.
  * For PING/PONG/ACK, this might be empty or contain minimal info.
  */
 @Serializable
@@ -65,3 +70,26 @@ data class TriggerImportPayload(
     val url: String
 )
 
+// --- New Payloads for Auto Drag and Drop ---
+
+/**
+ * Payload for the CAPTURE_MOUSE_POSITION packet.
+ * Specifies whether the captured position is for the source (SRC) or destination (DES).
+ *
+ * @param purpose A string indicating the purpose, e.g., "SRC" or "DES".
+ */
+@Serializable
+data class CaptureMousePayload(
+    val purpose: String // "SRC" or "DES"
+)
+
+/**
+ * Payload for the AUTO_DRAG_LOOP_COMMAND packet.
+ * Specifies whether to start or stop the auto drag loop on the PC server.
+ *
+ * @param action A string indicating the action, e.g., "START" or "STOP".
+ */
+@Serializable
+data class AutoDragLoopPayload(
+    val action: String // "START" or "STOP"
+)
