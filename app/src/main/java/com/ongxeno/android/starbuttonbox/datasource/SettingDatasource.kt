@@ -21,7 +21,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 /**
  * Manages persistent storage for application settings.
- * Includes network configuration and display preferences.
+ * Includes network configuration, display preferences, and first launch status.
  *
  * @param context Application context needed for DataStore.
  */
@@ -32,8 +32,10 @@ class SettingDatasource(private val context: Context) {
         private val TARGET_IP_ADDRESS = stringPreferencesKey("target_ip_address")
         // Key for the target port preference
         private val TARGET_PORT = intPreferencesKey("target_port")
-        // New key for the keep screen on setting preference
+        // Key for the keep screen on setting preference
         private val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+        // Key for the first launch flag
+        val IS_FIRST_LAUNCH = booleanPreferencesKey("is_first_launch") // Made public for ViewModel access
         // Logging tag
         private const val TAG = "SettingDatasource"
     }
@@ -57,7 +59,7 @@ class SettingDatasource(private val context: Context) {
         }
 
     /**
-     * New flow emitting the current state of the 'Keep Screen On' setting.
+     * Flow emitting the current state of the 'Keep Screen On' setting.
      * Defaults to false if the preference hasn't been set yet.
      * Handles potential read errors.
      */
@@ -69,6 +71,19 @@ class SettingDatasource(private val context: Context) {
         .map { preferences ->
             // Read the boolean preference, defaulting to false if not found
             preferences[KEEP_SCREEN_ON] ?: false
+        }
+
+    /**
+     * Flow emitting whether this is the first time the app is being launched.
+     * Defaults to true.
+     */
+    val isFirstLaunchFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            handleReadError(exception, "IsFirstLaunch")
+            emit(emptyPreferences()) // Emit empty on error, will default to true in map
+        }
+        .map { preferences ->
+            preferences[IS_FIRST_LAUNCH] ?: true // Default to true if not set
         }
 
     /**
@@ -108,6 +123,21 @@ class SettingDatasource(private val context: Context) {
     }
 
     /**
+     * Marks that the first launch setup process has been completed.
+     * Sets the IS_FIRST_LAUNCH preference to false.
+     */
+    suspend fun setFirstLaunchCompleted() {
+        try {
+            context.dataStore.edit { settings ->
+                settings[IS_FIRST_LAUNCH] = false
+                Log.i(TAG, "First launch completed flag set to false.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting first launch completed flag.", e)
+        }
+    }
+
+    /**
      * Helper function to log read errors from DataStore consistently.
      *
      * @param exception The caught exception.
@@ -120,7 +150,8 @@ class SettingDatasource(private val context: Context) {
         } else {
             // Rethrow other unexpected exceptions
             Log.e(TAG, "Unexpected error reading $settingName preferences.", exception)
-            throw exception
+            // It's generally better to not rethrow if you want the flow to recover with emit(emptyPreferences())
+            // throw exception
         }
     }
 }
