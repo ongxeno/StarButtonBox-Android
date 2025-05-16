@@ -11,6 +11,11 @@ sealed interface AppScreenRoute {
     /** The string representation of the route used by the NavController. */
     val route: String
 
+    /** Route for the Splash screen, shown on app launch for initialization. */
+    data object Splash : AppScreenRoute {
+        override val route = "splash"
+    }
+
     /** Route for the main screen displaying button layouts. */
     data object Main : AppScreenRoute {
         override val route = "main"
@@ -31,4 +36,3 @@ sealed interface AppScreenRoute {
         override val route = "manage_macros"
     }
 }
-

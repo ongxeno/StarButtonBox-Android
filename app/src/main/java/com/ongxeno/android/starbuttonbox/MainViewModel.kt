@@ -47,13 +47,13 @@ class MainViewModel @Inject constructor(
     private val settingDatasource: SettingDatasource,
     private val layoutRepository: LayoutRepository,
     private val macroRepository: MacroRepository,
-    private val connectionManager: ConnectionManager // Inject ConnectionManager
+    private val connectionManager: ConnectionManager
 ) : ViewModel() {
 
     private val _tag = "MainViewModel"
 
     // --- Loading State ---
-    private val _isLoading = MutableStateFlow(true)
+    private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     // --- Expose Connection Status from ConnectionManager ---
@@ -124,34 +124,34 @@ class MainViewModel @Inject constructor(
 
     private fun initializeAppData() {
         viewModelScope.launch {
-            _isLoading.value = true
-            Log.d(_tag, "Starting app data initialization...")
+            Log.d(_tag, "MainViewModel: Starting app data initialization/checks...")
             try {
-                // 1. Check initial network config for dialog display (ConnectionManager handles its own logic)
+                // 1. Check initial network config for dialog display.
+                // SplashViewModel ensures this is read, but MainViewModel can still prompt if it's missing.
                 val initialConfig = settingDatasource.networkConfigFlow.firstOrNull()
-                Log.d(_tag, "initializeAppData: Initial network config read: $initialConfig")
+                Log.d(_tag, "MainViewModel: Initial network config read: $initialConfig")
                 if (initialConfig?.ip.isNullOrBlank() || initialConfig?.port == null) {
-                    // Show dialog if no config, ConnectionManager will also see this and be in NO_CONFIG
+                    // Show dialog if no config
                     if (!_showConnectionConfigDialog.value) {
                         _showConnectionConfigDialog.value = true
                     }
                 }
 
-                // 2. Check if default layouts need to be added
+                // 2. Default layout population is now handled by SplashViewModel on first launch.
+                // The check for empty layouts and adding defaults is removed from here.
+                // LayoutRepository.allLayoutDefinitionsFlow will provide the (potentially pre-populated) layouts.
+                // We can still log the count for debugging.
                 val currentDefinitions = layoutRepository.layoutDefinitionsFlow.first()
-                Log.d(_tag, "initializeAppData: Definitions count from source: ${currentDefinitions.size}")
-                if (currentDefinitions.isEmpty()) {
-                    Log.i(_tag, "Layout definitions are empty, adding default.")
-                    layoutRepository.addDefaultLayouts()
-                    enabledLayoutsState.filter { it.isNotEmpty() }.first()
+                Log.d(_tag, "MainViewModel: Current layout definitions count: ${currentDefinitions.size}")
+                if (enabledLayoutsState.value.isEmpty() && currentDefinitions.isNotEmpty()) {
+                    Log.w(_tag, "MainViewModel: No layouts are enabled, but definitions exist. User might need to enable them in settings.")
                 }
 
+
             } catch (e: Exception) {
-                Log.e(_tag, "Error during app initialization", e)
+                Log.e(_tag, "Error during MainViewModel app data initialization", e)
             } finally {
-                Log.d(_tag, "App data initialization complete. Setting isLoading to false.")
-                delay(500) // Small delay for UI to settle if needed
-                _isLoading.value = false
+                Log.d(_tag, "MainViewModel: App data initialization/checks complete.")
             }
         }
     }

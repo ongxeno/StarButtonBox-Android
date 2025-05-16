@@ -9,13 +9,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,8 +25,8 @@ import com.ongxeno.android.starbuttonbox.navigation.AppScreenRoute
 import com.ongxeno.android.starbuttonbox.ui.screen.main.MainScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.ManageLayoutsScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.managemacros.ManageMacrosScreen
-import com.ongxeno.android.starbuttonbox.ui.screen.setting.SettingViewModel
 import com.ongxeno.android.starbuttonbox.ui.screen.setting.SettingsScreen
+import com.ongxeno.android.starbuttonbox.ui.screen.splash.SplashScreen
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -47,11 +48,22 @@ class MainActivity : ComponentActivity() {
 
                 NavHost(
                     navController = navController,
-                    startDestination = AppScreenRoute.Main.route // Set the starting screen route
+                    startDestination = AppScreenRoute.Splash.route // Set Splash as starting screen
                 ) {
                     composable(
+                        route = AppScreenRoute.Splash.route
+                        // Splash screen typically doesn't need complex entry/exit animations
+                        // as it's the first thing shown and pops itself off the stack.
+                    ) {
+                        SplashScreen(navController = navController) // Pass NavController
+                    }
+
+                    composable(
                         route = AppScreenRoute.Main.route,
-                        popEnterTransition = {
+                        enterTransition = { // Animation when Main enters (e.g., from Splash)
+                            fadeIn(animationSpec = tween(durationMillis = ANIMATION_DURATION_MS + 200))
+                        },
+                        popEnterTransition = { // Animation when Main re-enters (e.g., coming back from Settings)
                             slideInHorizontally(
                                 initialOffsetX = { fullWidth -> -fullWidth }, // Slide in from Left
                                 animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
@@ -62,6 +74,9 @@ class MainActivity : ComponentActivity() {
                                 targetOffsetX = { fullWidth -> -fullWidth }, // Slide out to Left
                                 animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
                             )
+                        },
+                        popExitTransition = { // Not typically used if Main is the "home base" after splash
+                            fadeOut(animationSpec = tween(durationMillis = ANIMATION_DURATION_MS))
                         }
                     ) {
                         MainScreen(
@@ -100,12 +115,15 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     ) {
-                        val settingViewModel: SettingViewModel = hiltViewModel()
-                        SettingsScreen(viewModel = settingViewModel, onNavigateToManageLayouts = {
-                            navController.navigate(AppScreenRoute.ManageLayouts.route)
-                        }, onNavigateToManageMacros = {
-                            navController.navigate(AppScreenRoute.ManageMacros.route)
-                        }, onNavigateBack = { navController.popBackStack() })
+                        SettingsScreen(
+                            onNavigateToManageLayouts = {
+                                navController.navigate(AppScreenRoute.ManageLayouts.route)
+                            },
+                            onNavigateToManageMacros = {
+                                navController.navigate(AppScreenRoute.ManageMacros.route)
+                            },
+                            onNavigateBack = { navController.popBackStack() }
+                        )
                     }
                     composable(
                         AppScreenRoute.ManageLayouts.route,
