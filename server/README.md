@@ -48,16 +48,7 @@ The server features a graphical user interface (GUI) for configuration and statu
 2.  **Install Dependencies:**
     Open a command prompt or PowerShell and install the required libraries using pip:
     ```bash
-    pip install pydirectinput pyautogui keyboard zeroconf pystray Pillow
-    ```
-    Alternatively, create a `requirements.txt` file with the following content and run `pip install -r requirements.txt`:
-    ```
-    pydirectinput
-    pyautogui
-    keyboard
-    zeroconf
-    pystray
-    Pillow
+    pip install pydirectinput pyautogui keyboard zeroconf pystray Pillow pyinstaller
     ```
 
 ## Configuration
