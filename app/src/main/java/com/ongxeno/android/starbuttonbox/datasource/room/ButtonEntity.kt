@@ -1,9 +1,13 @@
+package com.ongxeno.android.starbuttonbox.datasource.room // Ensure this package is correct
+
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.ongxeno.android.starbuttonbox.datasource.room.LayoutEntity
+// Make sure LayoutEntity is imported if it's in a different sub-package,
+// but assuming it's in the same 'room' package based on previous context.
+// import com.ongxeno.android.starbuttonbox.datasource.room.LayoutEntity
 import java.util.UUID
 
 /**
@@ -30,17 +34,17 @@ import java.util.UUID
             entity = LayoutEntity::class,
             parentColumns = ["id"],
             childColumns = ["layout_id"],
-            onDelete = ForeignKey.CASCADE // If a layout is deleted, its buttons are also deleted.
+            onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index(value = ["layout_id"])] // Index for faster querying of buttons by layoutId
+    indices = [Index(value = ["layout_id"])]
 )
 data class ButtonEntity(
     @PrimaryKey
     @ColumnInfo(name = "id")
     val id: String = UUID.randomUUID().toString(),
 
-    @ColumnInfo(name = "layout_id", index = true) // Index this column for foreign key lookups
+    @ColumnInfo(name = "layout_id")
     val layoutId: String,
 
     @ColumnInfo(name = "grid_col")
@@ -56,7 +60,7 @@ data class ButtonEntity(
     val gridHeight: Int,
 
     @ColumnInfo(name = "button_type")
-    val buttonTypeString: String, // Store FreeFormItemType.name() here
+    val buttonTypeString: String,
 
     @ColumnInfo(name = "macro_id")
     val macroId: String?,
@@ -71,5 +75,5 @@ data class ButtonEntity(
     val backgroundColorHex: String?,
 
     @ColumnInfo(name = "order_in_layout")
-    val orderInLayout: Int = 0 // Default order
+    val orderInLayout: Int = 0
 )

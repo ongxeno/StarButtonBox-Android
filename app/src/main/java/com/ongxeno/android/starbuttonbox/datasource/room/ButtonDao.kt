@@ -1,6 +1,5 @@
 package com.ongxeno.android.starbuttonbox.datasource.room
 
-import ButtonEntity
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
