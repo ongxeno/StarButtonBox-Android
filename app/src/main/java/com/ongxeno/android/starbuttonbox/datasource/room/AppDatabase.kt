@@ -1,14 +1,8 @@
 package com.ongxeno.android.starbuttonbox.datasource.room
 
-import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import com.ongxeno.android.starbuttonbox.di.ApplicationScope
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.serialization.json.Json
-import javax.inject.Provider
 
 /**
  * The main Room database class for the application.
@@ -38,11 +32,11 @@ abstract class AppDatabase : RoomDatabase() {
     /**
      * Abstract function to provide access to the LayoutDao.
      */
-    abstract fun layoutDao(): LayoutDao // Added LayoutDao accessor
+    abstract fun layoutDao(): LayoutDao
 
     /**
      * Abstract function to provide access to the ButtonDao.
      */
-    abstract fun buttonDao(): ButtonDao // Added ButtonDao accessor
+    abstract fun buttonDao(): ButtonDao
 
 }

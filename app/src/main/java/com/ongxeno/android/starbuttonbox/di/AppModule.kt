@@ -75,19 +75,6 @@ object AppModule { // Renamed from DatasourceModule for clarity if it was separa
         return SettingDatasource(context)
     }
 
-    /**
-     * Provides the new LayoutRepository as a singleton.
-     * Depends on the application context and the application-level CoroutineScope.
-     */
-    @Provides
-    @Singleton
-    fun provideLayoutRepository(
-        @ApplicationContext context: Context,
-        @ApplicationScope scope: CoroutineScope, // Inject the qualified scope
-    ): LayoutRepository {
-        return LayoutRepository(context, scope)
-    }
-
     // Provides Vibrator system service (nullable)
     @Provides
     @Singleton
