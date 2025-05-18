@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StarButtonBox PC Server Setup</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #3c3c3c;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            text-align: left;
+            max-width: 700px;
+            width: 100%;
+        }
+        h1 {
+            color: #FF9800;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-weight: 600;
+            text-align: center;
+        }
+        p, li {
+            line-height: 1.7;
+            color: #bdbdbd;
+            font-size: 16px;
+        }
+        ol {
+            padding-left: 20px;
+            margin-bottom: 25px;
+        }
+        li {
+            margin-bottom: 12px;
+        }
+        .download-section {
+            text-align: center;
+            margin: 20px 0; /* Adjusted margin */
+        }
+        .download-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 35px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            text-decoration: none;
+            transition: background-color 0.2s, transform 0.1s;
+            display: inline-block;
+        }
+        .download-button:hover {
+            background-color: #45a049;
+            transform: translateY(-1px);
+        }
+        .download-button:active {
+            transform: translateY(1px);
+        }
+        .note {
+            font-size: 0.9em; /* Slightly smaller */
+            color: #aaa;
+            margin-top: 8px; /* Adjusted margin */
+            margin-bottom: 8px;
+            padding: 8px;
+            background-color: #2a2a2a;
+            border-left: 3px solid #FFC107; /* Amber accent for notes */
+            border-radius: 4px;
+        }
+        .important {
+            color: #FFC107;
+            font-weight: bold;
+        }
+        .code {
+            background-color: #222;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.95em;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>StarButtonBox PC Server Setup</h1>
+
+    <p>Follow these steps to install and set up the StarButtonBox server application on your Windows PC:</p>
+
+    <ol>
+        <li>
+            <strong>Download the Server Installer:</strong> Click the button below to download the <code class="code">StarButtonBoxServer_Installer_v1.0.exe</code> file.
+            <p class="note"><span class="important">Browser Warning:</span> Your browser might show a warning when downloading executable (<code class="code">.exe</code>) files. This is a standard security precaution. You may need to choose "Keep" or "Download anyway" to proceed.</p>
+            <div class="download-section">
+                <a href="/download/StarButtonBoxServer_Installer_v1.0.exe" class="download-button" download>Download PC Server Installer</a>
+            </div>
+        </li>
+        <li>
+            <strong>Run the Installer:</strong>
+            Once downloaded, locate <code class="code">StarButtonBoxServer_Installer_v1.0.exe</code> and run it.
+            <p class="note"><span class="important">Windows Warning:</span> Windows Defender SmartScreen or other security software might display a warning like "Windows protected your PC". If this happens, you may need to click "<span class="important">More info</span>" and then "<span class="important">Run anyway</span>" to proceed with the installation. This is common for new applications that haven't built up a reputation yet.</p>
+            Follow the on-screen prompts to install the application (you can usually accept the default settings and installation location).
+        </li>
+        <li>
+            <strong>Check Network:</strong>
+            Ensure your PC (where you just installed the server) and your Android device are connected to the <span class="important">same Wi-Fi network</span>. This is crucial for them to communicate.
+        </li>
+        <li>
+            <strong>Launch and Start the Server:</strong>
+            After installation, launch "StarButtonBox Server" from your Start Menu or Desktop shortcut. The server control panel window will appear.
+            <br>
+            In the control panel, click the "<span class="important">Start Server</span>" button.
+        </li>
+        <li>
+            <strong>Allow Firewall Access:</strong>
+            When you start the server for the first time (or after installation), Windows Defender Firewall might ask for permission.
+            It's <span class="important">very important</span> to:
+            <ul>
+                <li>Check the box for <span class="important">Private networks</span> (and optionally Public networks if you understand the security implications for your network setup).</li>
+                <li>Click "<span class="important">Allow access</span>".</li>
+            </ul>
+            <p class="note">(If you miss this prompt or deny access, you may need to manually create a firewall rule later.)</p>
+        </li>
+        <li>
+            <strong>Return to the App:</strong>
+            Once the server status in its control panel shows "<span class="important">Server Running</span>" (or similar positive status), go back to your Android device and tap "<span class="important">Continue to Network Setup</span>" in the StarButtonBox app.
+        </li>
+    </ol>
+</div>
+</body>
+</html>
