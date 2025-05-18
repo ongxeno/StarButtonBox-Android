@@ -2,7 +2,7 @@
 # Holds configuration constants for the StarButtonBox server.
 
 # --- Network Configuration ---
-COMMAND_PORT = 5005  # Port for receiving commands and health checks
+COMMAND_PORT = 58009  # Port for receiving commands and health checks
 BUFFER_SIZE = 2048 # UDP receive buffer size
 
 # --- mDNS Configuration ---
