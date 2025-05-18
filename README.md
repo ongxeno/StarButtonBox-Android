@@ -88,7 +88,4 @@ Contributions are welcome! Please feel free to submit pull requests, create issu
 
 ## 5. License
 
-*(You should add a LICENSE file to your repository and refer to it here, e.g., MIT License, Apache 2.0, etc.)*
-
-Example:
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE.md) file for details.

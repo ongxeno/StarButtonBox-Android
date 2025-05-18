@@ -1,6 +1,6 @@
 package com.ongxeno.android.starbuttonbox.ui.screen.setting // Ensure correct package
 
-// Import SettingsSection from its location
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -14,20 +14,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info // For About icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,27 +40,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
 
-/**
- * Composable function for the main settings screen.
- * Uses Scaffold and TopAppBar for consistent structure.
- *
- * @param viewModel The MainViewModel instance.
- */
-@OptIn(ExperimentalMaterial3Api::class) // Added OptIn for TopAppBar
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingViewModel = hiltViewModel(),
     onNavigateToManageLayouts: () -> Unit,
     onNavigateToManageMacros: () -> Unit,
+    onNavigateToAbout: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    // Collect necessary state from the ViewModel
     val networkConfig by viewModel.networkConfigState.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOnState.collectAsStateWithLifecycle()
     val showConnectionDialog by viewModel.showConnectionConfigDialogState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    // Prepare display strings for network config
     val ipDisplay = networkConfig?.ip ?: "Not Set"
     val portDisplay = networkConfig?.port?.toString() ?: "Not Set"
 
@@ -70,36 +68,34 @@ fun SettingsScreen(
                             contentDescription = "Back"
                         )
                     }
-                }
-                // No actions needed for this screen's top bar
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             )
         }
     ) { paddingValues ->
-        // Main column for the settings content, applying padding from Scaffold
-        // Make the column scrollable in case content overflows on smaller screens
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues) // Apply padding from Scaffold
-                .verticalScroll(rememberScrollState()) // Make content scrollable
-                .padding(16.dp) // Add padding around the content inside the scrollable area
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp)
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
             // --- Connection Section ---
             SettingsSection(title = "Connection") {
                 Text(
                     "Current Target: ${ipDisplay}:${portDisplay}",
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
                 )
                 Button(
-                    onClick = { /* TODO: Implement mDNS Discovery Logic */ },
-                    enabled = false
+                    onClick = { viewModel.showConnectionConfigDialog() },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                 ) {
-                    Text("Automatic PC Discovery (TODO)")
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = { viewModel.showConnectionConfigDialog() }) {
-                    Text("Configure Connection Manually")
+                    Text("Configure Connection")
                 }
             }
 
@@ -108,7 +104,9 @@ fun SettingsScreen(
             // --- Display Section ---
             SettingsSection(title = "Display") {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -122,32 +120,33 @@ fun SettingsScreen(
                     text = "Prevents the screen from turning off automatically while the app is active.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp)
                 )
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // --- Manage Layout Section ---
-            SettingsSection(title = "Manage Layout") {
-                Button(
-                    onClick = onNavigateToManageLayouts,
-                    enabled = true
-                ) {
-                    Text("Manage Layouts / Tabs")
-                }
+            // --- Manage Data Section ---
+            SettingsSection(title = "Manage Data") {
+                SettingsListItem(
+                    text = "Manage Layouts / Tabs",
+                    onClick = onNavigateToManageLayouts
+                )
+                SettingsListItem(
+                    text = "Manage Key Bindings (Macros)",
+                    onClick = onNavigateToManageMacros
+                )
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // --- Key Binding Section ---
-            SettingsSection(title = "Key Binding") {
-                Button(
-                    onClick = onNavigateToManageMacros,
-                    enabled = true
-                ) {
-                    Text("Configure Key Bindings")
-                }
+            // --- About Section ---
+            SettingsSection(title = "Application") {
+                SettingsListItem(
+                    text = "About StarButtonBox",
+                    icon = Icons.Filled.Info,
+                    onClick = onNavigateToAbout
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -156,7 +155,7 @@ fun SettingsScreen(
         if (showConnectionDialog) {
             ConnectionConfigDialog(
                 viewModel = hiltViewModel(),
-                onDismissRequest = { viewModel.hideConnectionConfigDialog(context) },
+                onDismissRequest = { toastContext -> viewModel.hideConnectionConfigDialog(toastContext ?: context) },
                 onSave = { ip, port -> viewModel.saveConnectionSettings(ip, port) },
                 networkConfigFlow = viewModel.networkConfigState,
             )
@@ -164,21 +163,43 @@ fun SettingsScreen(
     }
 }
 
-// Note: SettingsSection remains defined here for now.
-// Consider moving it to a common 'components' package if used elsewhere.
 @Composable
 fun SettingsSection(
     title: String,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
         )
         content()
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsListItem(
+    text: String,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    modifier: Modifier = Modifier
+) {
+    ListItem(
+        headlineContent = { Text(text, style = MaterialTheme.typography.bodyLarge) },
+        leadingContent = if (icon != null) {
+            { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            null
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
 }

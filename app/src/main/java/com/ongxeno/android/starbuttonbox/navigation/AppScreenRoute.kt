@@ -1,8 +1,5 @@
 package com.ongxeno.android.starbuttonbox.navigation
 
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
-
 /**
  * Defines the routes for different screens in the application using a sealed interface.
  * This provides a structured and type-safe way to manage navigation destinations.
@@ -39,5 +36,10 @@ sealed interface AppScreenRoute {
     /** Route for the screen to manage (view, search, potentially edit/delete) macros. */
     data object ManageMacros : AppScreenRoute {
         override val route = "manage_macros"
+    }
+
+    /** Route for the About screen, displaying license and app information. */
+    data object About : AppScreenRoute {
+        override val route = "about"
     }
 }

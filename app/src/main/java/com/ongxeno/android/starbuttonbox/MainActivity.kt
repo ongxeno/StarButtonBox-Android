@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ongxeno.android.starbuttonbox.navigation.AppScreenRoute
+import com.ongxeno.android.starbuttonbox.ui.screen.about.AboutScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.main.MainScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.ManageLayoutsScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.managemacros.ManageMacrosScreen
@@ -127,6 +129,9 @@ class MainActivity : ComponentActivity() {
                             onNavigateToManageMacros = {
                                 navController.navigate(AppScreenRoute.ManageMacros.route)
                             },
+                            onNavigateToAbout = {
+                                navController.navigate(AppScreenRoute.About.route)
+                            },
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
@@ -170,6 +175,35 @@ class MainActivity : ComponentActivity() {
                         ManageMacrosScreen(
                             onNavigateBack = { navController.popBackStack() }
                         )
+                    }
+                    composable(
+                        route = AppScreenRoute.About.route,
+                        enterTransition = { // Animation when AboutScreen enters (e.g., from Settings)
+                            slideInHorizontally(
+                                initialOffsetX = { fullWidth -> fullWidth },
+                                animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
+                            )
+                        },
+                        exitTransition = { // Animation when AboutScreen exits (e.g., going to a deeper link, if any)
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> -fullWidth },
+                                animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
+                            )
+                        },
+                        popEnterTransition = { // Animation when AboutScreen re-enters on back press (not typical if it's a leaf)
+                            slideInHorizontally(
+                                initialOffsetX = { fullWidth -> -fullWidth },
+                                animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
+                            )
+                        },
+                        popExitTransition = { // Animation when AboutScreen is popped from back stack (back to Settings)
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> fullWidth },
+                                animationSpec = tween(durationMillis = ANIMATION_DURATION_MS)
+                            )
+                        }
+                    ) {
+                        AboutScreen(onNavigateBack = { navController.popBackStack() })
                     }
                 }
             }
