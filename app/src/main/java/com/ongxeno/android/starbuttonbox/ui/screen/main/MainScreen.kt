@@ -2,17 +2,13 @@ package com.ongxeno.android.starbuttonbox.ui.screen.main
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.tween // For animationSpec
-import androidx.compose.animation.fadeIn // Import fadeIn
-import androidx.compose.animation.fadeOut // Import fadeOut
-import androidx.compose.animation.scaleIn // Import scaleIn
-import androidx.compose.animation.scaleOut // Import scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith // Import togetherWith (formerly with)
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +18,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -54,9 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +65,7 @@ import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
 import com.ongxeno.android.starbuttonbox.ui.layout.AutoDragAndDropLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.DemoLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.FreeFormLayout
+import com.ongxeno.android.starbuttonbox.ui.layout.LayoutInfo
 import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
@@ -86,7 +80,6 @@ fun MainScreen(
     val enabledLayouts by viewModel.enabledLayoutsState.collectAsStateWithLifecycle()
     val showConnectionConfigDialog by viewModel.showConnectionConfigDialogState.collectAsStateWithLifecycle()
     val showMainAddLayoutDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
-
     val connectionStatus by viewModel.connectionStatus.collectAsStateWithLifecycle()
     val latestResponseTimeMs by viewModel.latestResponseTimeMs.collectAsStateWithLifecycle()
 
@@ -96,19 +89,13 @@ fun MainScreen(
     ) {
         if (isLoading) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
             }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
+            Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -118,9 +105,7 @@ fun MainScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
+                        modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         enabledLayouts.forEachIndexed { index, layoutInfo ->
@@ -140,30 +125,13 @@ fun MainScreen(
                             onClick = { viewModel.requestAddLayout() },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = "Add New Layout",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Icon(Icons.Filled.Add, "Add New Layout", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-
-                    ResponseTimeIndicator(
-                        responseTimeMs = latestResponseTimeMs,
-                        connectionStatus = connectionStatus
-                    )
-
+                    ResponseTimeIndicator(responseTimeMs = latestResponseTimeMs, connectionStatus = connectionStatus)
                     ConnectionStatusIndicator(status = connectionStatus)
-
-                    IconButton(
-                        onClick = navigateToSettings,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            Icons.Filled.Settings,
-                            contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    IconButton(onClick = navigateToSettings, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Filled.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                 }
@@ -173,21 +141,20 @@ fun MainScreen(
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                 ) {
-                    val layoutInfo =
-                        if (selectedLayoutIndex >= 0 && selectedLayoutIndex < enabledLayouts.size) {
-                            enabledLayouts[selectedLayoutIndex]
-                        } else if (enabledLayouts.isNotEmpty()) {
-                            LaunchedEffect(enabledLayouts) { viewModel.selectLayout(0) }
-                            enabledLayouts[0]
-                        } else { null }
+                    val currentLayoutInfo = enabledLayouts.getOrNull(selectedLayoutIndex)
+                        ?: enabledLayouts.firstOrNull().also {
+                            if (enabledLayouts.isNotEmpty()) {
+                                LaunchedEffect(enabledLayouts.size) { viewModel.selectLayout(0) }
+                            }
+                        }
 
-                    when (layoutInfo?.type) {
+                    when (currentLayoutInfo?.type) {
                         LayoutType.NORMAL_FLIGHT -> NormalFlightLayout(hiltViewModel())
                         LayoutType.FREE_FORM -> FreeFormLayout(viewModel, hiltViewModel())
                         LayoutType.DEMO -> DemoLayout()
-                        LayoutType.AUTO_DRAG_AND_DROP -> AutoDragAndDropLayout(hiltViewModel()) // Added new case
-                        LayoutType.PLACEHOLDER -> PlaceholderLayout("Layout: ${layoutInfo.id}")
-                        else -> PlaceholderLayout("No Layouts Enabled")
+                        LayoutType.AUTO_DRAG_AND_DROP -> AutoDragAndDropLayout(hiltViewModel())
+                        LayoutType.PLACEHOLDER -> PlaceholderLayout("Layout: ${currentLayoutInfo.title}")
+                        null -> PlaceholderLayout("No Layouts Enabled or Selected")
                     }
                 }
             }
@@ -206,76 +173,40 @@ fun MainScreen(
             AddEditLayoutDialog(
                 layoutToEdit = null,
                 onDismissRequest = { viewModel.cancelAddLayout() },
-                onConfirm = { title, iconName, _ ->
-                    viewModel.confirmAddLayout(title, iconName)
-                }
+                onConfirm = { title, iconName, _ -> viewModel.confirmAddLayout(title, iconName) }
             )
         }
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
 @SuppressLint("UnusedContentLambdaTargetStateParameter")
 @Composable
-fun ResponseTimeIndicator(
-    responseTimeMs: Long?,
-    connectionStatus: ConnectionStatus
-) {
+fun ResponseTimeIndicator(responseTimeMs: Long?, connectionStatus: ConnectionStatus) {
     val tintColor = MaterialTheme.colorScheme.onSurfaceVariant
     val placeholderText = "--"
     val unitText = "ms"
-
     val displayValue: String
     val displayUnit: String
 
     when {
         connectionStatus == ConnectionStatus.NO_CONFIG || connectionStatus == ConnectionStatus.CONNECTION_LOST -> {
-            displayValue = placeholderText
-            displayUnit = ""
+            displayValue = placeholderText; displayUnit = ""
         }
-        responseTimeMs != null -> {
-            displayValue = responseTimeMs.toString()
-            displayUnit = unitText
-        }
-        else -> {
-            displayValue = placeholderText
-            displayUnit = ""
-        }
+        responseTimeMs != null -> { displayValue = responseTimeMs.toString(); displayUnit = unitText }
+        else -> { displayValue = placeholderText; displayUnit = "" }
     }
 
-    val animationKey = displayValue + displayUnit
-
-    Box(
-        modifier = Modifier
-            .size(width = 56.dp, height = 48.dp)
-            .padding(horizontal = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.size(width = 56.dp, height = 48.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = displayValue,
-                color = tintColor,
-                fontSize = 14.sp,
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center,
-                lineHeight = 16.sp
-            )
+            Text(displayValue, color = tintColor, fontSize = 14.sp, fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, lineHeight = 16.sp)
             if (displayUnit.isNotEmpty()) {
-                Text(
-                    text = displayUnit,
-                    color = tintColor,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 8.sp
-                )
+                Text(displayUnit, color = tintColor, fontSize = 10.sp, fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, lineHeight = 8.sp)
             }
         }
     }
 }
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun ConnectionStatusIndicator(status: ConnectionStatus) {
     val icon: ImageVector
@@ -283,48 +214,23 @@ fun ConnectionStatusIndicator(status: ConnectionStatus) {
     val contentDescription: String
 
     when (status) {
-        ConnectionStatus.NO_CONFIG -> {
-            icon = Icons.Filled.WifiOff
-            contentDescription = "No network configuration"
-        }
-        ConnectionStatus.CONNECTING -> {
-            icon = Icons.Filled.WifiTethering
-            contentDescription = "Connecting to server"
-        }
-        ConnectionStatus.CONNECTED -> {
-            icon = Icons.Filled.Wifi
-            contentDescription = "Connected to server"
-        }
-        ConnectionStatus.SENDING_PENDING_ACK -> {
-            icon = Icons.Filled.HourglassTop
-            contentDescription = "Sending data to server"
-        }
-        ConnectionStatus.CONNECTION_LOST -> {
-            icon = Icons.Filled.ErrorOutline
-            contentDescription = "Connection to server lost"
-        }
+        ConnectionStatus.NO_CONFIG -> { icon = Icons.Filled.WifiOff; contentDescription = "No network configuration" }
+        ConnectionStatus.CONNECTING -> { icon = Icons.Filled.WifiTethering; contentDescription = "Connecting to server" }
+        ConnectionStatus.CONNECTED -> { icon = Icons.Filled.Wifi; contentDescription = "Connected to server" }
+        ConnectionStatus.SENDING_PENDING_ACK -> { icon = Icons.Filled.HourglassTop; contentDescription = "Sending data, awaiting acknowledgment" }
+        ConnectionStatus.CONNECTION_LOST -> { icon = Icons.Filled.ErrorOutline; contentDescription = "Connection to server lost" }
     }
 
     Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
         AnimatedContent(
             targetState = icon,
             transitionSpec = {
-                (fadeIn(animationSpec = androidx.compose.animation.core.tween(200)) +
-                        scaleIn(initialScale = 0.8f, animationSpec = androidx.compose.animation.core.tween(200)))
-                    .togetherWith(
-                        fadeOut(animationSpec = androidx.compose.animation.core.tween(200)) +
-                                scaleOut(targetScale = 0.8f, animationSpec = androidx.compose.animation.core.tween(200))
-                    )
+                (fadeIn(animationSpec = tween(200)) + scaleIn(initialScale = 0.8f, animationSpec = tween(200)))
+                    .togetherWith(fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 0.8f, animationSpec = tween(200)))
             },
             label = "ConnectionStatusIconAnimation"
         ) { targetIcon ->
-            Icon(
-                imageVector = targetIcon,
-                contentDescription = contentDescription,
-                tint = tintColor,
-                modifier = Modifier.size(24.dp)
-            )
+            Icon(targetIcon, contentDescription, tint = tintColor, modifier = Modifier.size(24.dp))
         }
     }
 }
-

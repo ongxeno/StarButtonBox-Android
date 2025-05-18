@@ -17,6 +17,7 @@ import com.ongxeno.android.starbuttonbox.datasource.ConnectionManager
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository
 import com.ongxeno.android.starbuttonbox.datasource.MacroRepository
 import com.ongxeno.android.starbuttonbox.datasource.SettingDatasource
+import com.ongxeno.android.starbuttonbox.datasource.room.LayoutEntity
 import com.ongxeno.android.starbuttonbox.ui.layout.LayoutInfo
 import com.ongxeno.android.starbuttonbox.ui.layout.toLayoutInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -49,20 +50,15 @@ class MainViewModel @Inject constructor(
 
     private val _tag = "MainViewModel"
 
-    // --- Loading State ---
-    private val _isLoading = MutableStateFlow(false)
+    private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // --- Expose Connection Status from ConnectionManager ---
     val connectionStatus: StateFlow<ConnectionStatus> = connectionManager.connectionStatus
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConnectionStatus.NO_CONFIG)
 
-    // --- New: Expose Latest Response Time from ConnectionManager ---
     val latestResponseTimeMs: StateFlow<Long?> = connectionManager.latestResponseTimeMs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-
-    // --- State Flows for UI (Layouts, etc.) ---
     val networkConfigState: StateFlow<NetworkConfig?> = settingDatasource.networkConfigFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -80,176 +76,126 @@ class MainViewModel @Inject constructor(
     val showAddLayoutDialogState: StateFlow<Boolean> = _showAddLayoutDialog.asStateFlow()
 
     private val _showConnectionConfigDialog = MutableStateFlow(false)
-    val showConnectionConfigDialogState: StateFlow<Boolean> =
-        _showConnectionConfigDialog.asStateFlow()
+    val showConnectionConfigDialogState: StateFlow<Boolean> = _showConnectionConfigDialog.asStateFlow()
 
     val keepScreenOnState: StateFlow<Boolean> = settingDatasource.keepScreenOnFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val selectedLayoutIdFlow: Flow<String?> = combine(
         selectedLayoutIndexState, enabledLayoutsState
-    ) { index, enabledLayouts -> enabledLayouts.getOrNull(index)?.id }
+    ) { index, currentEnabledLayouts -> currentEnabledLayouts.getOrNull(index)?.id }
         .distinctUntilChanged()
 
     val currentFreeFormItemsState: StateFlow<List<FreeFormItemState>> = selectedLayoutIdFlow
         .flatMapLatest { layoutId ->
             if (layoutId != null) {
-                Log.d(_tag, "Selected layout ID changed to: $layoutId, fetching items.")
+                Log.d(_tag, "Selected layout ID changed to: $layoutId, fetching items for FreeFormLayout.")
                 layoutRepository.getLayoutItemsFlow(layoutId)
             } else {
-                Log.d(_tag, "No layout selected or layout ID is null, emitting empty list for items.")
+                Log.d(_tag, "No layout selected or layout ID is null, emitting empty list for FreeFormLayout items.")
                 flowOf(emptyList())
             }
         }
-        .catch { e -> Log.e(_tag, "Error in currentFreeFormItemsState flow", e); emit(emptyList()) }
+        .catch { e -> Log.e(_tag, "Error in currentFreeFormItemsState flow for MainViewModel", e); emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val allMacrosState: StateFlow<List<Macro>> = macroRepository.getAllMacros()
         .map { list -> list.map { entity -> entity.toUi() }}
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // --- Initialization ---
     init {
-        Log.d(_tag, "ViewModel initialized. ConnectionManager state: ${connectionManager.getCurrentConnectionStatus()}")
-        // Network config observation is now primarily handled by ConnectionManager.
-        // MainViewModel can observe connectionManager.connectionStatus for UI updates.
+        Log.d(_tag, "ViewModel initialized.")
         initializeAppData()
     }
 
     private fun initializeAppData() {
         viewModelScope.launch {
-            _isLoading.value = true // Start loading
-            Log.d(_tag, "MainViewModel: Starting app data initialization/checks...")
+            _isLoading.value = true
+            Log.d(_tag, "MainViewModel: Starting app data initialization.")
             try {
-                // 1. Check initial network config for dialog display.
                 val initialConfig = settingDatasource.networkConfigFlow.firstOrNull()
-                Log.d(_tag, "MainViewModel: Initial network config read: $initialConfig")
                 if (initialConfig?.ip.isNullOrBlank() || initialConfig?.port == null) {
-                    if (!_showConnectionConfigDialog.value) {
-                        _showConnectionConfigDialog.value = true
-                    }
+                    if (!_showConnectionConfigDialog.value) _showConnectionConfigDialog.value = true
                 }
-
-                // 2. Default layout population is now handled by LayoutRepository on first launch.
-                layoutRepository.addDefaultLayoutsIfFirstLaunch() // Call the new method
-
-                val currentLayouts = layoutRepository.allLayoutsFlow.first() // Check LayoutEntity
-                Log.d(_tag, "MainViewModel: Current layouts count from DB: ${currentLayouts.size}")
-                if (enabledLayoutsState.value.isEmpty() && currentLayouts.isNotEmpty()) {
-                    Log.w(_tag, "MainViewModel: No layouts are enabled, but definitions exist. User might need to enable them in settings.")
-                }
-
+                layoutRepository.addDefaultLayoutsIfFirstLaunch()
+                val currentLayouts = layoutRepository.allLayoutsFlow.first()
+                Log.d(_tag, "MainViewModel: Current layouts count from DB after init: ${currentLayouts.size}")
             } catch (e: Exception) {
                 Log.e(_tag, "Error during MainViewModel app data initialization", e)
             } finally {
-                _isLoading.value = false // Finish loading
-                Log.d(_tag, "MainViewModel: App data initialization/checks complete.")
+                _isLoading.value = false
+                Log.d(_tag, "MainViewModel: App data initialization complete.")
             }
         }
     }
 
-    // --- Event Handlers ---
-
     fun saveConnectionSettings(ip: String, port: Int) {
         viewModelScope.launch {
             settingDatasource.saveSettings(ip, port)
-            // ConnectionManager will pick up the new settings via its own collection of networkConfigFlow
             _showConnectionConfigDialog.value = false
-            Log.i(_tag, "Connection settings saved via MainViewModel.")
         }
     }
 
     fun setKeepScreenOn(enabled: Boolean) {
-        viewModelScope.launch {
-            settingDatasource.saveKeepScreenOn(enabled)
-            Log.d(_tag, "Keep screen on set to: $enabled")
-        }
+        viewModelScope.launch { settingDatasource.saveKeepScreenOn(enabled) }
     }
 
-    fun showConnectionConfigDialog() {
-        Log.d(_tag, "Showing connection config dialog from MainViewModel.")
-        _showConnectionConfigDialog.value = true
-        // ConnectionManager might also be triggered by SettingViewModel if that dialog is used
-    }
+    fun showConnectionConfigDialog() { _showConnectionConfigDialog.value = true }
 
     fun hideConnectionConfigDialog(contextForToast: Context? = null) {
         viewModelScope.launch {
-            val config = networkConfigState.value
-            if (config?.ip != null && config.port != null) {
-                Log.d(_tag, "Hiding connection config dialog from MainViewModel.")
+            if (networkConfigState.value?.ip != null && networkConfigState.value?.port != null) {
                 _showConnectionConfigDialog.value = false
             } else {
-                Log.d(_tag, "Attempted to hide connection config, but config is invalid.")
-                contextForToast?.let {
-                    Handler(Looper.getMainLooper()).post {
-                        Toast.makeText(it, "Please save connection settings first", Toast.LENGTH_SHORT).show()
-                    }
-                }
+                contextForToast?.let { Handler(Looper.getMainLooper()).post { Toast.makeText(it, "Please save connection settings first", Toast.LENGTH_SHORT).show() } }
             }
         }
     }
 
     fun selectLayout(index: Int) {
         viewModelScope.launch {
-            Log.d(_tag, "Saving selected layout index: $index")
-            layoutRepository.saveSelectedLayoutIndex(index)
-        }
-    }
-
-    fun requestAddLayout() {
-        Log.d(_tag, "Requesting Add Layout Dialog from Main Screen")
-        _showAddLayoutDialog.value = true
-    }
-
-    fun confirmAddLayout(title: String, iconName: String) {
-        viewModelScope.launch {
-            // The "+" button on MainScreen always adds a new FreeForm layout
-            layoutRepository.addLayout(
-                title = title,
-                layoutType = LayoutType.FREE_FORM,
-                iconName = iconName,
-                initialButtons = emptyList() // New FreeForm layouts start empty
-            )
-            Log.i(_tag, "Added new FreeForm layout from Main Screen: $title")
-            _showAddLayoutDialog.value = false
-
-            // Select the newly added layout (it's appended to the end)
-            val newLayoutIndex = layoutRepository.allLayoutsFlow.first().size -1
-            if(newLayoutIndex >= 0) {
-                // Ensure the new layout is enabled before trying to select it in the enabled list
-                val newLayoutId = layoutRepository.allLayoutsFlow.first().lastOrNull()?.id
-                if (newLayoutId != null) {
-                    // Wait for enabledLayoutsState to update if necessary
-                    val updatedEnabledLayouts = enabledLayoutsState.first { layouts -> layouts.any {it.id == newLayoutId} }
-                    val newEnabledIndex = updatedEnabledLayouts.indexOfFirst { it.id == newLayoutId }
-                    if (newEnabledIndex != -1) {
-                        selectLayout(newEnabledIndex)
-                    }
-                }
+            val currentEnabledLayouts = enabledLayoutsState.first()
+            if (index >= 0 && index < currentEnabledLayouts.size) {
+                layoutRepository.saveSelectedLayoutIndex(index)
+            } else if (currentEnabledLayouts.isNotEmpty()) {
+                layoutRepository.saveSelectedLayoutIndex(0)
             }
         }
     }
 
-    fun cancelAddLayout() {
-        _showAddLayoutDialog.value = false
+    fun requestAddLayout() { _showAddLayoutDialog.value = true }
+
+    fun confirmAddLayout(title: String, iconName: String) {
+        viewModelScope.launch {
+            layoutRepository.addLayout(title, LayoutType.FREE_FORM, iconName, emptyList())
+            _showAddLayoutDialog.value = false
+            val newLayoutId = layoutRepository.allLayoutsFlow.first().lastOrNull()?.id
+            if (newLayoutId != null) {
+                val updatedEnabledLayouts = enabledLayoutsState.first { layouts -> layouts.any {it.id == newLayoutId} }
+                val newEnabledIndex = updatedEnabledLayouts.indexOfFirst { it.id == newLayoutId }
+                if (newEnabledIndex != -1) selectLayout(newEnabledIndex)
+            }
+        }
     }
+
+    fun cancelAddLayout() { _showAddLayoutDialog.value = false }
 
     fun saveFreeFormLayout(items: List<FreeFormItemState>) {
         viewModelScope.launch {
             val layoutId = selectedLayoutIdFlow.first()
             if (layoutId != null) {
-                Log.d(_tag, "Saving ${items.size} layout items for ID: $layoutId")
+                Log.i(_tag, "saveFreeFormLayout: Saving ${items.size} items for layout ID: $layoutId")
+                if (items.isNotEmpty()) {
+                    items.forEachIndexed { index, item ->
+                        Log.d(_tag, "saveFreeFormLayout: Item $index to save: ID=${item.id}, Text='${item.text}', Pos=(${item.gridCol},${item.gridRow})")
+                    }
+                }
                 layoutRepository.saveLayoutItems(layoutId, items)
             } else {
-                Log.w(_tag, "Cannot save layout items, selectedLayoutId is null.")
+                Log.w(_tag, "saveFreeFormLayout: Cannot save, selectedLayoutId is null.")
             }
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        // ConnectionManager is a @Singleton, its lifecycle is tied to the application.
-        // If it were scoped to this ViewModel, you'd call connectionManager.onCleared() here.
-        Log.d(_tag, "MainViewModel cleared.")
-    }
+    override fun onCleared() { super.onCleared(); Log.d(_tag, "MainViewModel cleared.") }
 }
