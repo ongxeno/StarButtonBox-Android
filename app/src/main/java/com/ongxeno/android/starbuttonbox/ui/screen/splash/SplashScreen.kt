@@ -1,27 +1,10 @@
 package com.ongxeno.android.starbuttonbox.ui.screen.splash
 
+import android.util.Log
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -36,6 +19,25 @@ import com.ongxeno.android.starbuttonbox.R
 import com.ongxeno.android.starbuttonbox.navigation.AppScreenRoute
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+// Assuming SplashViewModelInterface is defined elsewhere and imported
+// For example: import com.ongxeno.android.starbuttonbox.ui.SplashViewModelInterface
+
+class PreviewSplashViewModel(
+    initialIsLoading: Boolean = true,
+    initialIsFirstLaunch: Boolean = false,
+    initialIsInitializationComplete: Boolean = false,
+    initialNavigateToSetup: Boolean = false
+) : SplashViewModelInterface {
+    override val isLoading = MutableStateFlow(initialIsLoading)
+    override val isFirstLaunch = MutableStateFlow(initialIsFirstLaunch)
+    override val isInitializationComplete = MutableStateFlow(initialIsInitializationComplete)
+    override val navigateToSetupFlow = MutableStateFlow(initialNavigateToSetup)
+    override fun markFirstLaunchCompletedInViewModel() { /* No-op for preview */ }
+}
+
+private const val SPLASH_SCREEN_TAG = "SplashScreen"
 
 @Composable
 fun SplashScreen(
@@ -43,17 +45,19 @@ fun SplashScreen(
     viewModel: SplashViewModelInterface = hiltViewModel<SplashViewModel>()
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
-    val isFirstLaunch by viewModel.isFirstLaunch.collectAsState()
+    val isFirstLaunch by viewModel.isFirstLaunch.collectAsState() // Still useful for markFirstLaunchCompleted
     val isInitializationComplete by viewModel.isInitializationComplete.collectAsState()
+    val navigateToSetup by viewModel.navigateToSetupFlow.collectAsState()
 
     val inPreviewMode = LocalInspectionMode.current
 
-    val navigateToMain = {
-        if (isFirstLaunch) {
+    val performNavigation = { destinationRoute: String ->
+        if (isFirstLaunch) { // Mark first launch completed when navigating away from splash
             viewModel.markFirstLaunchCompletedInViewModel()
         }
-        if (!inPreviewMode && navController.currentDestination?.route != AppScreenRoute.Main.route) {
-            navController.navigate(AppScreenRoute.Main.route) {
+        if (!inPreviewMode && navController.currentDestination?.route != destinationRoute) {
+            Log.i(SPLASH_SCREEN_TAG, "Navigating from Splash to $destinationRoute")
+            navController.navigate(destinationRoute) {
                 popUpTo(AppScreenRoute.Splash.route) {
                     inclusive = true
                 }
@@ -72,7 +76,7 @@ fun SplashScreen(
             if (isLoading) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground), // <<< CHANGED HERE
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
                         contentDescription = "App Logo",
                         modifier = Modifier.size(128.dp)
                     )
@@ -82,7 +86,9 @@ fun SplashScreen(
                     Text("Initializing...", style = MaterialTheme.typography.bodyLarge)
                 }
             } else if (isInitializationComplete) {
-                if (isFirstLaunch) {
+                // The UI for "Welcome..." is shown if navigateToSetup is true.
+                // Navigation is handled by LaunchedEffect or the "Skip" button.
+                if (navigateToSetup) { // This implies it's a first launch AND network config is missing
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
@@ -108,64 +114,70 @@ fun SplashScreen(
                         ) {
                             TextButton(
                                 onClick = {
-                                    navigateToMain()
+                                    // Skipping setup means going directly to Main.
+                                    // markFirstLaunchCompleted will be called by performNavigation.
+                                    performNavigation(AppScreenRoute.Main.route)
                                 }
                             ) {
                                 Text("Skip for Now")
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
-                                onClick = { /* No action for now */ },
-                                enabled = false
+                                onClick = {
+                                    performNavigation(AppScreenRoute.SetupStartScreen.route)
+                                }
                             ) {
-                                Text("Start Setup (Soon)")
+                                Text("Start Setup")
                             }
                         }
                     }
-                } else {
-                    // UI is blank here intentionally, as LaunchedEffect will navigate.
-                    // You could show a brief "Loading Main Screen..." if desired.
                 }
+                // If navigateToSetup is false, LaunchedEffect will handle navigation to MainScreen.
+                // If navigateToSetup is true and user does nothing on the UI above, LaunchedEffect will navigate to SetupStartScreen.
             }
         }
     }
 
-    LaunchedEffect(isInitializationComplete, isFirstLaunch, inPreviewMode) {
+    LaunchedEffect(isInitializationComplete, navigateToSetup, inPreviewMode) {
         if (isInitializationComplete && !inPreviewMode) {
-            if (!isFirstLaunch) {
-                navigateToMain()
+            // If the "Welcome UI" for setup is being shown (because navigateToSetup is true),
+            // we let user interaction (Skip or Start Setup buttons) handle navigation.
+            // This LaunchedEffect will only navigate if that UI is *not* currently relevant
+            // or if no interaction happens on it (leading to SetupStartScreen by default if navigateToSetup is true).
+            if (navigateToSetup) {
+                // This will be the default navigation if the user doesn't click "Skip"
+                // from the "Welcome..." UI when navigateToSetup is true.
+                // If the "Welcome..." UI is *not* shown at all when navigateToSetup is true,
+                // this becomes the primary navigation to the setup flow.
+                // Adding a small delay to allow the "Welcome" UI to be seen if shown.
+                kotlinx.coroutines.delay(500) // Optional delay
+                if (navController.currentDestination?.route == AppScreenRoute.Splash.route) { // Ensure we are still on splash
+                    performNavigation(AppScreenRoute.SetupStartScreen.route)
+                }
             } else {
+                // Not a first launch needing setup OR (first launch with config already present).
+                performNavigation(AppScreenRoute.Main.route)
             }
         }
     }
 }
 
 // --- Preview Composable Wrapper ---
-
-class PreviewSplashViewModel(
-    initialIsLoading: Boolean = true,
-    initialIsFirstLaunch: Boolean = false,
-    initialIsInitializationComplete: Boolean = false
-) : SplashViewModelInterface {
-    override val isLoading = MutableStateFlow(initialIsLoading)
-    override val isFirstLaunch = MutableStateFlow(initialIsFirstLaunch)
-    override val isInitializationComplete = MutableStateFlow(initialIsInitializationComplete)
-    override fun markFirstLaunchCompletedInViewModel() { /* No-op for preview */ }
-}
-
 @Composable
 private fun SplashScreenPreview(
     isLoading: Boolean,
     isFirstLaunch: Boolean,
-    isInitializationComplete: Boolean
+    isInitializationComplete: Boolean,
+    navigateToSetup: Boolean
 ) {
-    StarButtonBoxTheme { // Apply your app's theme for consistent previews
+    StarButtonBoxTheme {
         SplashScreen(
-            navController = rememberNavController(), // A mock NavController for preview
+            navController = rememberNavController(),
             viewModel = PreviewSplashViewModel(
                 initialIsLoading = isLoading,
                 initialIsFirstLaunch = isFirstLaunch,
-                initialIsInitializationComplete = isInitializationComplete
+                initialIsInitializationComplete = isInitializationComplete,
+                initialNavigateToSetup = navigateToSetup
             )
         )
     }
@@ -177,17 +189,30 @@ private fun SplashScreenPreview(
 fun SplashScreenLoadingPreview() {
     SplashScreenPreview(
         isLoading = true,
-        isFirstLaunch = false, // Can be false as loading UI is independent
-        isInitializationComplete = false
+        isFirstLaunch = false,
+        isInitializationComplete = false,
+        navigateToSetup = false
     )
 }
 
-@Preview(name = "Splash Screen First Launch UI", showBackground = true)
+@Preview(name = "Splash Screen First Launch UI (Needs Setup)", showBackground = true)
 @Composable
-fun SplashScreenFirstLaunchPreview() {
+fun SplashScreenFirstLaunchNeedsSetupPreview() {
     SplashScreenPreview(
         isLoading = false,
         isFirstLaunch = true,
-        isInitializationComplete = true
+        isInitializationComplete = true,
+        navigateToSetup = true
+    )
+}
+
+@Preview(name = "Splash Screen First Launch (Config OK)", showBackground = true)
+@Composable
+fun SplashScreenFirstLaunchConfigOkPreview() {
+    SplashScreenPreview(
+        isLoading = false,
+        isFirstLaunch = true,
+        isInitializationComplete = true,
+        navigateToSetup = false
     )
 }

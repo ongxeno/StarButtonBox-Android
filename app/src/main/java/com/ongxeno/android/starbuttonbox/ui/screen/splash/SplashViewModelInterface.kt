@@ -6,5 +6,6 @@ interface SplashViewModelInterface {
     val isLoading: StateFlow<Boolean>
     val isFirstLaunch: StateFlow<Boolean>
     val isInitializationComplete: StateFlow<Boolean>
+    val navigateToSetupFlow: StateFlow<Boolean>
     fun markFirstLaunchCompletedInViewModel()
 }
