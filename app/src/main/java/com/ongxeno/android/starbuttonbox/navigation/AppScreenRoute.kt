@@ -21,6 +21,11 @@ sealed interface AppScreenRoute {
         override val route = "main"
     }
 
+    /** Route for the initial setup flow. */
+    data object SetupStartScreen : AppScreenRoute {
+        override val route = "setup_start"
+    }
+
     /** Route for the application settings screen. */
     data object Settings : AppScreenRoute {
         override val route = "settings"

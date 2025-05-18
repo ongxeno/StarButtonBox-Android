@@ -26,6 +26,7 @@ import com.ongxeno.android.starbuttonbox.ui.screen.main.MainScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.ManageLayoutsScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.managemacros.ManageMacrosScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.setting.SettingsScreen
+import com.ongxeno.android.starbuttonbox.ui.screen.setup.SetupStartScreen
 import com.ongxeno.android.starbuttonbox.ui.screen.splash.SplashScreen
 import com.ongxeno.android.starbuttonbox.ui.theme.StarButtonBoxTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -52,10 +53,14 @@ class MainActivity : ComponentActivity() {
                 ) {
                     composable(
                         route = AppScreenRoute.Splash.route
-                        // Splash screen typically doesn't need complex entry/exit animations
-                        // as it's the first thing shown and pops itself off the stack.
                     ) {
-                        SplashScreen(navController = navController) // Pass NavController
+                        SplashScreen(navController = navController)
+                    }
+
+                    composable(
+                        route = AppScreenRoute.SetupStartScreen.route
+                    ) {
+                        SetupStartScreen(navController = navController)
                     }
 
                     composable(
