@@ -60,9 +60,9 @@ class SplashViewModel @Inject constructor(
                 if (firstLaunch) {
                     Log.i(_tag, "First launch detected.")
                     // Populate default layouts if it's the first launch
-                    val currentLayouts = layoutRepository.allLayoutDefinitionsFlow.first()
+                    val currentLayouts = layoutRepository.allLayoutsFlow.first()
                     if (currentLayouts.isEmpty()) {
-                        layoutRepository.addDefaultLayouts()
+                        layoutRepository.addDefaultLayoutsIfFirstLaunch()
                         Log.i(_tag, "Default layouts populated successfully.")
                     } else {
                         Log.w(_tag, "First launch detected, but layouts were NOT empty (${currentLayouts.size} found). Skipping default layout population.")
