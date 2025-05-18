@@ -1,5 +1,4 @@
 __pycache__/*
-.venv/*
-dist/*
-build/*
+dist/
+Output/
 server.log
