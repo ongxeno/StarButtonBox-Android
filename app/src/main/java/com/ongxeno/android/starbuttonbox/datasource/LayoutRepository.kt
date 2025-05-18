@@ -1,6 +1,5 @@
 package com.ongxeno.android.starbuttonbox.datasource
 
-import ButtonEntity
 import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
@@ -12,6 +11,7 @@ import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemType
 import com.ongxeno.android.starbuttonbox.data.LayoutType
 import com.ongxeno.android.starbuttonbox.datasource.room.ButtonDao
+import com.ongxeno.android.starbuttonbox.datasource.room.ButtonEntity
 import com.ongxeno.android.starbuttonbox.datasource.room.LayoutDao
 import com.ongxeno.android.starbuttonbox.datasource.room.LayoutEntity
 import com.ongxeno.android.starbuttonbox.di.ApplicationScope
@@ -20,88 +20,63 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-// DataStore for selectedLayoutIndex only
 private val Context.selectedLayoutIndexDataStore: DataStore<Preferences> by preferencesDataStore(name = "selected_layout_prefs")
 
-/**
- * Repository responsible for managing layout definitions (now LayoutEntity),
- * their order, associated buttons (ButtonEntity), and selection state.
- * Uses Room for persistence of layouts and buttons, and DataStore for selected index.
- *
- * @param context Application context.
- * @param appScope Application-level CoroutineScope for managing StateFlows.
- * @param layoutDao DAO for layout operations.
- * @param buttonDao DAO for button operations.
- * @param settingDatasource Datasource for settings like isFirstLaunch.
- */
 @Singleton
 class LayoutRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     @ApplicationScope private val appScope: CoroutineScope,
     private val layoutDao: LayoutDao,
     private val buttonDao: ButtonDao,
-    private val settingDatasource: SettingDatasource // For isFirstLaunch check
+    private val settingDatasource: SettingDatasource
 ) {
 
     private val tag = "LayoutRepository"
 
     private object PrefKeys {
-        val SELECTED_LAYOUT_INDEX = intPreferencesKey("selected_layout_index_v2") // v2 to avoid conflict if old key exists
+        val SELECTED_LAYOUT_INDEX = intPreferencesKey("selected_layout_index_v2")
     }
 
-    // --- Flows for Data ---
-
-    /** Flow for the index of the currently selected layout/tab. */
     val selectedLayoutIndexFlow: Flow<Int> = context.selectedLayoutIndexDataStore.data
         .map { preferences -> preferences[PrefKeys.SELECTED_LAYOUT_INDEX] ?: 0 }
-        .catch { e ->
-            Log.e(tag, "Error reading selected layout index", e); emit(0)
-        }
+        .catch { e -> Log.e(tag, "Error reading selected layout index", e); emit(0) }
         .stateIn(appScope, SharingStarted.WhileSubscribed(5000), 0)
 
-
-    /**
-     * Flow providing the ordered list of **all** LayoutEntity objects.
-     * Initial value is an empty list.
-     */
     val allLayoutsFlow: Flow<List<LayoutEntity>> = layoutDao.getAllLayoutsOrdered()
-        .stateIn(
-            scope = appScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+        .stateIn(scope = appScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList())
 
-    /**
-     * Flow providing the ordered list of **enabled** LayoutEntity objects.
-     * Initial value is an empty list.
-     */
     val enabledLayoutsFlow: Flow<List<LayoutEntity>> = allLayoutsFlow
         .map { allLayouts -> allLayouts.filter { it.isEnabled } }
-        .stateIn(
-            scope = appScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+        .stateIn(scope = appScope, started = SharingStarted.WhileSubscribed(5000), initialValue = emptyList())
 
-    /** Provides a Flow of FreeFormItemState list for a specific layout ID. */
+    /**
+     * Provides a COLD Flow of FreeFormItemState list for a specific layout ID.
+     * This ensures that collectors like .first() will trigger a fresh query.
+     */
     fun getLayoutItemsFlow(layoutId: String): Flow<List<FreeFormItemState>> {
-        return buttonDao.getButtonsForLayout(layoutId)
+        Log.d(tag, "getLayoutItemsFlow: Called for layoutId: $layoutId (returning cold flow)")
+        return buttonDao.getButtonsForLayout(layoutId) // This is a Flow from Room
             .map { buttonEntities ->
+                Log.d(tag, "getLayoutItemsFlow: DAO emitted ${buttonEntities.size} ButtonEntities for layoutId: $layoutId")
                 buttonEntities.map { entity ->
-                    // Map ButtonEntity to FreeFormItemState
                     FreeFormItemState(
                         id = entity.id,
-                        type = try { FreeFormItemType.valueOf(entity.buttonTypeString) } catch (e: IllegalArgumentException) { FreeFormItemType.MOMENTARY_BUTTON },
+                        type = try { FreeFormItemType.valueOf(entity.buttonTypeString) } catch (e: IllegalArgumentException) {
+                            Log.w(tag, "Invalid buttonTypeString '${entity.buttonTypeString}' for button ${entity.id}, defaulting to MOMENTARY_BUTTON.")
+                            FreeFormItemType.MOMENTARY_BUTTON
+                        },
                         text = entity.label,
                         macroId = entity.macroId,
                         gridCol = entity.gridCol,
@@ -110,19 +85,14 @@ class LayoutRepository @Inject constructor(
                         gridHeight = entity.gridHeight,
                         textSizeSp = entity.labelSizeSp,
                         backgroundColorHex = entity.backgroundColorHex
-                        // orderInLayout is part of ButtonEntity, not directly in FreeFormItemState
                     )
                 }
             }
-            .distinctUntilChanged()
+            .distinctUntilChanged() // Still useful to avoid unnecessary downstream processing if the list content hasn't changed
             .catch { e -> Log.e(tag, "Error in getLayoutItemsFlow for $layoutId", e); emit(emptyList()) }
-            .stateIn(appScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        // REMOVED .stateIn() here. MainViewModel will use .stateIn() on this cold flow.
     }
 
-
-    // --- Suspend Functions for Saving Data ---
-
-    /** Saves the order of layout IDs by updating their orderIndex. */
     suspend fun saveLayoutOrder(orderedIds: List<String>) {
         try {
             layoutDao.updateLayoutOrder(orderedIds)
@@ -132,7 +102,6 @@ class LayoutRepository @Inject constructor(
         }
     }
 
-    /** Saves the index of the selected layout. */
     suspend fun saveSelectedLayoutIndex(index: Int) {
         try {
             context.selectedLayoutIndexDataStore.edit { prefs -> prefs[PrefKeys.SELECTED_LAYOUT_INDEX] = index }
@@ -142,7 +111,6 @@ class LayoutRepository @Inject constructor(
         }
     }
 
-    /** Updates a single layout definition. */
     suspend fun updateLayoutEntity(layoutEntity: LayoutEntity) {
         try {
             layoutDao.updateLayout(layoutEntity)
@@ -152,7 +120,6 @@ class LayoutRepository @Inject constructor(
         }
     }
 
-    /** Toggles the isEnabled status of a specific layout. */
     suspend fun toggleLayoutEnabled(layoutId: String) {
         try {
             val currentLayout = layoutDao.getLayoutById(layoutId).firstOrNull()
@@ -168,16 +135,22 @@ class LayoutRepository @Inject constructor(
         }
     }
 
-    /** Saves the FreeForm items for a specific layout ID. */
     suspend fun saveLayoutItems(layoutId: String, items: List<FreeFormItemState>) {
+        Log.d(tag, "saveLayoutItems: Called for layoutId: $layoutId with ${items.size} items.")
+        if (items.isNotEmpty()) {
+            items.forEachIndexed { index, item ->
+                Log.d(tag, "saveLayoutItems: Item $index to save: ID=${item.id}, Text='${item.text}', Macro='${item.macroId}', Pos=(${item.gridCol},${item.gridRow}), Size=(${item.gridWidth}x${item.gridHeight})")
+            }
+        }
+
         try {
             val layout = layoutDao.getLayoutById(layoutId).firstOrNull()
             if (layout == null) {
-                Log.e(tag, "Cannot save items for non-existent layout ID: $layoutId")
+                Log.e(tag, "saveLayoutItems: Cannot save items, LayoutEntity not found for ID: $layoutId")
                 return
             }
             if (LayoutType.valueOf(layout.layoutTypeString) != LayoutType.FREE_FORM) {
-                Log.e(tag, "Cannot save items for layout '$layoutId' - it's not a FREE_FORM layout.")
+                Log.e(tag, "saveLayoutItems: Cannot save items for layout '$layoutId' - it's not a FREE_FORM layout. Type: ${layout.layoutTypeString}")
                 return
             }
 
@@ -194,25 +167,29 @@ class LayoutRepository @Inject constructor(
                     label = itemState.text,
                     labelSizeSp = itemState.textSizeSp,
                     backgroundColorHex = itemState.backgroundColorHex,
-                    orderInLayout = index // Maintain order from the list
+                    orderInLayout = index
                 )
             }
-            // Perform in transaction for atomicity
-            buttonDao.deleteButtonsByLayoutId(layoutId) // Clear old buttons
-            buttonDao.insertAllButtons(buttonEntities) // Insert new buttons
-            Log.i(tag, "Saved ${buttonEntities.size} items for FreeForm layout '$layoutId'.")
+            Log.d(tag, "saveLayoutItems: Converted to ${buttonEntities.size} ButtonEntities for layoutId: $layoutId")
+
+            buttonDao.deleteButtonsByLayoutId(layoutId)
+            Log.d(tag, "saveLayoutItems: Deleted old buttons for layoutId: $layoutId")
+            if (buttonEntities.isNotEmpty()) {
+                buttonDao.insertAllButtons(buttonEntities)
+                Log.i(tag, "saveLayoutItems: Inserted ${buttonEntities.size} new buttons for layoutId: $layoutId.")
+            } else {
+                Log.i(tag, "saveLayoutItems: No new buttons to insert for layoutId: $layoutId (items list was empty).")
+            }
         } catch (e: Exception) {
-            Log.e(tag, "Error saving layout items for '$layoutId'", e)
+            Log.e(tag, "saveLayoutItems: Error saving layout items for '$layoutId'", e)
         }
     }
 
-    /** Deletes a layout by its ID. Associated buttons are deleted by cascade. */
     suspend fun deleteLayout(layoutId: String) {
         try {
             val affectedRows = layoutDao.deleteLayoutById(layoutId)
             if (affectedRows > 0) {
                 Log.i(tag, "Successfully deleted layout '$layoutId' and its buttons (cascade).")
-                // Adjust selected index if the deleted layout was selected or before the selected one
                 val currentSelectedIndex = selectedLayoutIndexFlow.first()
                 val allLayoutsAfterDelete = allLayoutsFlow.first()
                 if (currentSelectedIndex >= allLayoutsAfterDelete.size && allLayoutsAfterDelete.isNotEmpty()) {
@@ -228,16 +205,15 @@ class LayoutRepository @Inject constructor(
         }
     }
 
-    /** Adds a new layout definition and its buttons (if any). */
     suspend fun addLayout(
         title: String,
         layoutType: LayoutType,
         iconName: String,
-        initialButtons: List<FreeFormItemState>? = null // For FREE_FORM layouts
+        initialButtons: List<FreeFormItemState>? = null
     ) {
         try {
             val currentLayouts = allLayoutsFlow.first()
-            val newOrderIndex = currentLayouts.size // Append to the end
+            val newOrderIndex = currentLayouts.size
 
             val newLayoutEntity = LayoutEntity(
                 id = if (layoutType == LayoutType.FREE_FORM) "freeform_${UUID.randomUUID()}" else layoutType.name.lowercase(),
@@ -245,14 +221,15 @@ class LayoutRepository @Inject constructor(
                 layoutTypeString = layoutType.name,
                 iconName = iconName,
                 isEnabled = true,
-                isUserDefined = layoutType == LayoutType.FREE_FORM, // Only FreeForm is user-defined for now
-                isDeletable = layoutType == LayoutType.FREE_FORM,   // Only FreeForm is deletable
+                isUserDefined = layoutType == LayoutType.FREE_FORM,
+                isDeletable = layoutType == LayoutType.FREE_FORM,
                 orderIndex = newOrderIndex
             )
             layoutDao.insertLayout(newLayoutEntity)
-            Log.i(tag, "Added new layout: ${newLayoutEntity.title} (ID: ${newLayoutEntity.id})")
+            Log.i(tag, "Added new layout: ${newLayoutEntity.title} (ID: ${newLayoutEntity.id}) with orderIndex: $newOrderIndex")
 
             if (layoutType == LayoutType.FREE_FORM && initialButtons != null) {
+                Log.d(tag, "addLayout: Saving ${initialButtons.size} initial buttons for new FreeForm layout ${newLayoutEntity.id}")
                 saveLayoutItems(newLayoutEntity.id, initialButtons)
             }
         } catch (e: Exception) {
@@ -260,7 +237,6 @@ class LayoutRepository @Inject constructor(
         }
     }
 
-    /** Adds the default layouts to the Room database if it's the first launch and DB is empty. */
     suspend fun addDefaultLayoutsIfFirstLaunch() {
         val isFirstLaunch = settingDatasource.isFirstLaunchFlow.first()
         if (isFirstLaunch) {
@@ -268,55 +244,24 @@ class LayoutRepository @Inject constructor(
             if (currentLayouts.isEmpty()) {
                 Log.i(tag, "First launch and no layouts in DB. Populating default layouts.")
                 try {
-                    // Normal Flight Layout
-                    val normalFlight = LayoutEntity(
-                        id = "normal_flight",
-                        title = "Flight Controls",
-                        layoutTypeString = LayoutType.NORMAL_FLIGHT.name,
-                        iconName = "RocketLaunch", // Updated icon name
-                        isEnabled = true, // Enable by default
-                        isUserDefined = false,
-                        isDeletable = false,
-                        orderIndex = 0
-                    )
+                    val normalFlight = LayoutEntity(id = "normal_flight", title = "Flight Controls", layoutTypeString = LayoutType.NORMAL_FLIGHT.name, iconName = "RocketLaunch", isEnabled = true, isUserDefined = false, isDeletable = false, orderIndex = 0)
                     layoutDao.insertLayout(normalFlight)
 
-                    // Auto Drag & Drop Layout
-                    val autoDragDrop = LayoutEntity(
-                        id = "auto_drag_drop",
-                        title = "Auto Drag",
-                        layoutTypeString = LayoutType.AUTO_DRAG_AND_DROP.name,
-                        iconName = "Mouse", // Updated icon name
-                        isEnabled = true, // Enable by default
-                        isUserDefined = false,
-                        isDeletable = false,
-                        orderIndex = 1
-                    )
+                    val autoDragDrop = LayoutEntity(id = "auto_drag_drop", title = "Auto Drag", layoutTypeString = LayoutType.AUTO_DRAG_AND_DROP.name, iconName = "Mouse", isEnabled = true, isUserDefined = false, isDeletable = false, orderIndex = 1)
                     layoutDao.insertLayout(autoDragDrop)
 
-                    // Example FreeForm Layout (Optional - can be added by user)
                     val exampleFreeFormId = "freeform_example_${UUID.randomUUID()}"
-                    val exampleFreeForm = LayoutEntity(
-                        id = exampleFreeFormId,
-                        title = "My First Panel",
-                        layoutTypeString = LayoutType.FREE_FORM.name,
-                        iconName = "DashboardCustomize",
-                        isEnabled = true,
-                        isUserDefined = true,
-                        isDeletable = true,
-                        orderIndex = 2
-                    )
+                    val exampleFreeForm = LayoutEntity(id = exampleFreeFormId, title = "My First Panel", layoutTypeString = LayoutType.FREE_FORM.name, iconName = "DashboardCustomize", isEnabled = true, isUserDefined = true, isDeletable = true, orderIndex = 2)
                     layoutDao.insertLayout(exampleFreeForm)
-                    // Add some default buttons to this example FreeForm layout
+
                     val defaultButtons = listOf(
-                        FreeFormItemState(id = exampleFreeFormId, text = "Button 1", gridCol = 0, gridRow = 0, gridWidth = 10, gridHeight = 4, macroId = null),
-                        FreeFormItemState(id = exampleFreeFormId, text = "Button 2", gridCol = 10, gridRow = 0, gridWidth = 10, gridHeight = 4, macroId = null)
+                        FreeFormItemState(id = "btn_ex1_${UUID.randomUUID()}", text = "Button 1", gridCol = 0, gridRow = 0, gridWidth = 10, gridHeight = 4, macroId = null),
+                        FreeFormItemState(id = "btn_ex2_${UUID.randomUUID()}", text = "Button 2", gridCol = 10, gridRow = 0, gridWidth = 10, gridHeight = 4, macroId = null)
                     )
+                    Log.d(tag, "addDefaultLayoutsIfFirstLaunch: Attempting to save ${defaultButtons.size} default buttons for layout $exampleFreeFormId")
                     saveLayoutItems(exampleFreeFormId, defaultButtons)
 
-
                     Log.i(tag, "Default layouts populated into Room DB.")
-                    // SplashViewModel will call settingDatasource.setFirstLaunchCompleted()
                 } catch (e: Exception) {
                     Log.e(tag, "Error populating default layouts into Room DB", e)
                 }
