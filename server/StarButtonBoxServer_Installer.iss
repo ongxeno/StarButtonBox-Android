@@ -57,4 +57,4 @@ Filename: "{app}\StarButtonBoxServer.exe"; Description: "{cm:LaunchProgram,StarB
 ; Always remove the main application directory
 Type: filesandordirs; Name: "{app}"
 ; Conditionally remove user settings and logs from AppData
-Type: filesandordirs; Name: "{userappdata}\StarButtonBoxServer"; Tasks: removeusersettings
+Type: filesandordirs; Name: "{userappdata}\StarButtonBoxServer"
