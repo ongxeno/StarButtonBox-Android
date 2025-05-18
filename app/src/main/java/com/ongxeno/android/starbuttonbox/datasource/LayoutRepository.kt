@@ -1,399 +1,330 @@
 package com.ongxeno.android.starbuttonbox.datasource
 
+import ButtonEntity
 import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
-import com.ongxeno.android.starbuttonbox.data.LayoutDefinition
+import com.ongxeno.android.starbuttonbox.data.FreeFormItemType
 import com.ongxeno.android.starbuttonbox.data.LayoutType
+import com.ongxeno.android.starbuttonbox.datasource.room.ButtonDao
+import com.ongxeno.android.starbuttonbox.datasource.room.LayoutDao
+import com.ongxeno.android.starbuttonbox.datasource.room.LayoutEntity
+import com.ongxeno.android.starbuttonbox.di.ApplicationScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.MapSerializer
-import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.Json
 import java.io.IOException
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.layoutDataStore: DataStore<Preferences> by preferencesDataStore(name = "layout_prefs")
+// DataStore for selectedLayoutIndex only
+private val Context.selectedLayoutIndexDataStore: DataStore<Preferences> by preferencesDataStore(name = "selected_layout_prefs")
 
 /**
- * Repository responsible for managing layout definitions, order, content (FreeForm items),
- * and selection state using DataStore for persistence.
- * Provides flows of LayoutDefinition objects; mapping to LayoutInfo happens closer to the UI.
- * Starts with an empty state on the very first run until defaults are explicitly added.
+ * Repository responsible for managing layout definitions (now LayoutEntity),
+ * their order, associated buttons (ButtonEntity), and selection state.
+ * Uses Room for persistence of layouts and buttons, and DataStore for selected index.
  *
  * @param context Application context.
- * @param externalScope Application-level CoroutineScope for managing StateFlows.
+ * @param appScope Application-level CoroutineScope for managing StateFlows.
+ * @param layoutDao DAO for layout operations.
+ * @param buttonDao DAO for button operations.
+ * @param settingDatasource Datasource for settings like isFirstLaunch.
  */
 @Singleton
 class LayoutRepository @Inject constructor(
-    private val context: Context,
-    private val externalScope: CoroutineScope,
+    @ApplicationContext private val context: Context,
+    @ApplicationScope private val appScope: CoroutineScope,
+    private val layoutDao: LayoutDao,
+    private val buttonDao: ButtonDao,
+    private val settingDatasource: SettingDatasource // For isFirstLaunch check
 ) {
 
-    private val TAG = "LayoutRepository"
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        prettyPrint = false
-        encodeDefaults = true
-        classDiscriminator = "_type"
-    }
+    private val tag = "LayoutRepository"
 
     private object PrefKeys {
-        val LAYOUT_DEFINITIONS = stringPreferencesKey("layout_definitions_map")
-        val LAYOUT_ORDER_IDS = stringPreferencesKey("layout_order_ids")
-        val SELECTED_LAYOUT_INDEX = intPreferencesKey("selected_layout_index")
+        val SELECTED_LAYOUT_INDEX = intPreferencesKey("selected_layout_index_v2") // v2 to avoid conflict if old key exists
     }
 
     // --- Flows for Data ---
 
-    /** Flow for the ordered list of layout IDs. Returns empty list if not set. */
-    private val layoutOrderIdsFlow: Flow<List<String>> = context.layoutDataStore.data
-        .map { prefs ->
-            prefs[PrefKeys.LAYOUT_ORDER_IDS]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
-        }
-        .catch { e ->
-            Log.e(TAG, "Error reading layout order", e); emit(emptyList())
-        }
-
-    /** Flow for the map of layout definitions. Returns empty map if not set. */
-    val layoutDefinitionsFlow: Flow<Map<String, LayoutDefinition>> = context.layoutDataStore.data
-        .map { prefs ->
-            val jsonString = prefs[PrefKeys.LAYOUT_DEFINITIONS]
-            if (jsonString.isNullOrBlank()) {
-                Log.d(TAG, "No layout definitions found in DataStore, returning empty map.")
-                emptyMap()
-            } else {
-                try {
-                    json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), jsonString)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error decoding layout definitions, returning empty map: ${e.message}")
-                    emptyMap()
-                }
-            }
-        }
-        .catch { e ->
-            Log.e(TAG, "Error reading layout definitions", e); emit(emptyMap())
-        }
-
     /** Flow for the index of the currently selected layout/tab. */
-    val selectedLayoutIndexFlow: Flow<Int> = context.layoutDataStore.data
+    val selectedLayoutIndexFlow: Flow<Int> = context.selectedLayoutIndexDataStore.data
         .map { preferences -> preferences[PrefKeys.SELECTED_LAYOUT_INDEX] ?: 0 }
         .catch { e ->
-            Log.e(TAG, "Error reading selected layout index", e); emit(0)
+            Log.e(tag, "Error reading selected layout index", e); emit(0)
         }
+        .stateIn(appScope, SharingStarted.WhileSubscribed(5000), 0)
+
 
     /**
-     * Flow providing the ordered list of **all** LayoutDefinition objects.
+     * Flow providing the ordered list of **all** LayoutEntity objects.
      * Initial value is an empty list.
      */
-    val allLayoutDefinitionsFlow: Flow<List<LayoutDefinition>> = combine(
-        layoutOrderIdsFlow,
-        layoutDefinitionsFlow
-    ) { orderedIds, definitionsMap ->
-        orderedIds.mapNotNull { id -> definitionsMap[id] }
-    }.stateIn(
-        scope = externalScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList() // Start empty
-    )
-
-    /**
-     * Flow providing the ordered list of **enabled** LayoutDefinition objects.
-     * Initial value is an empty list.
-     */
-    val enabledLayoutDefinitionsFlow: Flow<List<LayoutDefinition>> = allLayoutDefinitionsFlow
-        .map { allDefs -> allDefs.filter { it.isEnabled } }
+    val allLayoutsFlow: Flow<List<LayoutEntity>> = layoutDao.getAllLayoutsOrdered()
         .stateIn(
-            scope = externalScope,
+            scope = appScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
 
+    /**
+     * Flow providing the ordered list of **enabled** LayoutEntity objects.
+     * Initial value is an empty list.
+     */
+    val enabledLayoutsFlow: Flow<List<LayoutEntity>> = allLayoutsFlow
+        .map { allLayouts -> allLayouts.filter { it.isEnabled } }
+        .stateIn(
+            scope = appScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
-    /** Provides a Flow of the FreeForm items for a specific layout ID. */
+    /** Provides a Flow of FreeFormItemState list for a specific layout ID. */
     fun getLayoutItemsFlow(layoutId: String): Flow<List<FreeFormItemState>> {
-        return layoutDefinitionsFlow
-            .mapNotNull { definitionsMap -> definitionsMap[layoutId] }
-            .map { definition ->
-                if (definition.layoutType == LayoutType.FREE_FORM && !definition.layoutItemsJson.isNullOrBlank()) {
-                    try {
-                        json.decodeFromString(ListSerializer(FreeFormItemState.serializer()), definition.layoutItemsJson)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error deserializing items for layout $layoutId: ${e.message}", e)
-                        emptyList()
-                    }
-                } else {
-                    emptyList()
+        return buttonDao.getButtonsForLayout(layoutId)
+            .map { buttonEntities ->
+                buttonEntities.map { entity ->
+                    // Map ButtonEntity to FreeFormItemState
+                    FreeFormItemState(
+                        id = entity.id,
+                        type = try { FreeFormItemType.valueOf(entity.buttonTypeString) } catch (e: IllegalArgumentException) { FreeFormItemType.MOMENTARY_BUTTON },
+                        text = entity.label,
+                        macroId = entity.macroId,
+                        gridCol = entity.gridCol,
+                        gridRow = entity.gridRow,
+                        gridWidth = entity.gridWidth,
+                        gridHeight = entity.gridHeight,
+                        textSizeSp = entity.labelSizeSp,
+                        backgroundColorHex = entity.backgroundColorHex
+                        // orderInLayout is part of ButtonEntity, not directly in FreeFormItemState
+                    )
                 }
             }
             .distinctUntilChanged()
-            .catch { e -> Log.e(TAG, "Error in getLayoutItemsFlow for $layoutId", e); emit(emptyList()) }
+            .catch { e -> Log.e(tag, "Error in getLayoutItemsFlow for $layoutId", e); emit(emptyList()) }
+            .stateIn(appScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
 
     // --- Suspend Functions for Saving Data ---
 
-    /** Saves the order of layout IDs. */
+    /** Saves the order of layout IDs by updating their orderIndex. */
     suspend fun saveLayoutOrder(orderedIds: List<String>) {
         try {
-            context.layoutDataStore.edit { prefs ->
-                prefs[PrefKeys.LAYOUT_ORDER_IDS] = orderedIds.joinToString(",")
-            }
-            Log.i(TAG, "Saved new layout order: $orderedIds")
-        } catch (e: IOException) {
-            Log.e(TAG, "Error saving layout order", e)
-        }
-    }
-
-    /** Saves the entire map of layout definitions. */
-    private suspend fun saveLayoutDefinitions(definitions: Map<String, LayoutDefinition>) {
-        try {
-            val jsonString = json.encodeToString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), definitions)
-            context.layoutDataStore.edit { prefs ->
-                prefs[PrefKeys.LAYOUT_DEFINITIONS] = jsonString
-            }
-            Log.i(TAG, "Saved layout definitions map.")
+            layoutDao.updateLayoutOrder(orderedIds)
+            Log.i(tag, "Saved new layout order via DAO: $orderedIds")
         } catch (e: Exception) {
-            Log.e(TAG, "Error saving layout definitions map", e)
+            Log.e(tag, "Error saving layout order via DAO", e)
         }
     }
 
     /** Saves the index of the selected layout. */
     suspend fun saveSelectedLayoutIndex(index: Int) {
         try {
-            context.layoutDataStore.edit { prefs -> prefs[PrefKeys.SELECTED_LAYOUT_INDEX] = index }
+            context.selectedLayoutIndexDataStore.edit { prefs -> prefs[PrefKeys.SELECTED_LAYOUT_INDEX] = index }
+            Log.i(tag, "Selected layout index saved: $index")
         } catch (e: IOException) {
-            Log.e(TAG, "Error saving selected layout index", e)
+            Log.e(tag, "Error saving selected layout index", e)
         }
     }
 
-    /** Updates a single layout definition in the stored map. */
-    suspend fun updateLayoutDefinition(definition: LayoutDefinition) {
+    /** Updates a single layout definition. */
+    suspend fun updateLayoutEntity(layoutEntity: LayoutEntity) {
         try {
-            context.layoutDataStore.edit { prefs ->
-                val currentJson = prefs[PrefKeys.LAYOUT_DEFINITIONS]
-                val currentDefinitions = if (currentJson.isNullOrBlank()) {
-                    mutableMapOf()
-                } else {
-                    try {
-                        json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentJson).toMutableMap()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error decoding definitions in update, starting fresh.", e)
-                        mutableMapOf()
-                    }
-                }
-                currentDefinitions[definition.id] = definition
-                prefs[PrefKeys.LAYOUT_DEFINITIONS] = json.encodeToString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefinitions)
-                Log.i(TAG, "Updated layout definition for '${definition.id}'.")
-            }
+            layoutDao.updateLayout(layoutEntity)
+            Log.i(tag, "Updated layout entity for '${layoutEntity.id}'.")
         } catch(e: Exception) {
-            Log.e(TAG, "Error updating layout definition for '${definition.id}'", e)
+            Log.e(tag, "Error updating layout entity for '${layoutEntity.id}'", e)
         }
     }
 
     /** Toggles the isEnabled status of a specific layout. */
     suspend fun toggleLayoutEnabled(layoutId: String) {
         try {
-            context.layoutDataStore.edit { prefs ->
-                val currentJson = prefs[PrefKeys.LAYOUT_DEFINITIONS]
-                if (currentJson.isNullOrBlank()) {
-                    Log.w(TAG, "Cannot toggle enabled status, definitions are empty.")
-                    return@edit
-                }
-                try {
-                    val currentDefinitions = json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentJson).toMutableMap()
-                    val currentDefinition = currentDefinitions[layoutId]
-                    if (currentDefinition != null) {
-                        val updatedDefinition = currentDefinition.copy(isEnabled = !currentDefinition.isEnabled)
-                        currentDefinitions[layoutId] = updatedDefinition
-                        prefs[PrefKeys.LAYOUT_DEFINITIONS] = json.encodeToString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefinitions)
-                        Log.i(TAG, "Toggled isEnabled for layout '$layoutId' to ${updatedDefinition.isEnabled}.")
-                    } else {
-                        Log.w(TAG, "Layout ID '$layoutId' not found for toggling enabled status.")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error decoding/updating definitions for toggle", e)
-                }
+            val currentLayout = layoutDao.getLayoutById(layoutId).firstOrNull()
+            if (currentLayout != null) {
+                val updatedLayout = currentLayout.copy(isEnabled = !currentLayout.isEnabled)
+                layoutDao.updateLayout(updatedLayout)
+                Log.i(tag, "Toggled isEnabled for layout '$layoutId' to ${updatedLayout.isEnabled}.")
+            } else {
+                Log.w(tag, "Layout ID '$layoutId' not found for toggling enabled status.")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error accessing DataStore for toggleLayoutEnabled", e)
+            Log.e(tag, "Error accessing/updating DB for toggleLayoutEnabled", e)
         }
     }
-
 
     /** Saves the FreeForm items for a specific layout ID. */
     suspend fun saveLayoutItems(layoutId: String, items: List<FreeFormItemState>) {
         try {
-            context.layoutDataStore.edit { prefs ->
-                val currentJson = prefs[PrefKeys.LAYOUT_DEFINITIONS]
-                val currentDefinitions = if (currentJson.isNullOrBlank()) {
-                    Log.e(TAG, "Cannot save items, definitions map is empty.")
-                    return@edit
-                } else {
-                    try {
-                        json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentJson).toMutableMap()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error decoding definitions in saveLayoutItems, aborting.", e)
-                        return@edit
-                    }
-                }
-
-                val currentDefinition = currentDefinitions[layoutId]
-                if (currentDefinition == null) {
-                    Log.e(TAG, "Cannot save items for non-existent layout ID: $layoutId")
-                    return@edit
-                }
-                if (currentDefinition.layoutType != LayoutType.FREE_FORM) {
-                    Log.e(TAG, "Cannot save items for layout '$layoutId' - it's not a FREE_FORM layout.")
-                    return@edit
-                }
-
-                try {
-                    val itemsJson = json.encodeToString(ListSerializer(FreeFormItemState.serializer()), items)
-                    currentDefinitions[layoutId] = currentDefinition.copy(layoutItemsJson = itemsJson)
-                    prefs[PrefKeys.LAYOUT_DEFINITIONS] = json.encodeToString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefinitions)
-                    Log.d(TAG, "Saved items for FreeForm layout '$layoutId'.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error serializing items for layout '$layoutId'", e)
-                }
+            val layout = layoutDao.getLayoutById(layoutId).firstOrNull()
+            if (layout == null) {
+                Log.e(tag, "Cannot save items for non-existent layout ID: $layoutId")
+                return
             }
+            if (LayoutType.valueOf(layout.layoutTypeString) != LayoutType.FREE_FORM) {
+                Log.e(tag, "Cannot save items for layout '$layoutId' - it's not a FREE_FORM layout.")
+                return
+            }
+
+            val buttonEntities = items.mapIndexed { index, itemState ->
+                ButtonEntity(
+                    id = itemState.id,
+                    layoutId = layoutId,
+                    gridCol = itemState.gridCol,
+                    gridRow = itemState.gridRow,
+                    gridWidth = itemState.gridWidth,
+                    gridHeight = itemState.gridHeight,
+                    buttonTypeString = itemState.type.name,
+                    macroId = itemState.macroId,
+                    label = itemState.text,
+                    labelSizeSp = itemState.textSizeSp,
+                    backgroundColorHex = itemState.backgroundColorHex,
+                    orderInLayout = index // Maintain order from the list
+                )
+            }
+            // Perform in transaction for atomicity
+            buttonDao.deleteButtonsByLayoutId(layoutId) // Clear old buttons
+            buttonDao.insertAllButtons(buttonEntities) // Insert new buttons
+            Log.i(tag, "Saved ${buttonEntities.size} items for FreeForm layout '$layoutId'.")
         } catch (e: Exception) {
-            Log.e(TAG, "Error accessing DataStore for saveLayoutItems", e)
+            Log.e(tag, "Error saving layout items for '$layoutId'", e)
         }
     }
 
-    /** Deletes a layout by its ID (removes from order and definitions). */
+    /** Deletes a layout by its ID. Associated buttons are deleted by cascade. */
     suspend fun deleteLayout(layoutId: String) {
         try {
-            context.layoutDataStore.edit { prefs ->
-                // Update Definitions
-                val currentDefJson = prefs[PrefKeys.LAYOUT_DEFINITIONS]
-                var definitionRemoved = false
-                if (!currentDefJson.isNullOrBlank()) {
-                    try {
-                        val currentDefinitions = json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefJson).toMutableMap()
-                        if (currentDefinitions.remove(layoutId) != null) {
-                            prefs[PrefKeys.LAYOUT_DEFINITIONS] = json.encodeToString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefinitions)
-                            definitionRemoved = true
-                            Log.i(TAG, "Removed definition for '$layoutId'.")
-                        }
-                    } catch (e: Exception) { Log.e(TAG, "Error decoding/updating definitions for delete", e) }
+            val affectedRows = layoutDao.deleteLayoutById(layoutId)
+            if (affectedRows > 0) {
+                Log.i(tag, "Successfully deleted layout '$layoutId' and its buttons (cascade).")
+                // Adjust selected index if the deleted layout was selected or before the selected one
+                val currentSelectedIndex = selectedLayoutIndexFlow.first()
+                val allLayoutsAfterDelete = allLayoutsFlow.first()
+                if (currentSelectedIndex >= allLayoutsAfterDelete.size && allLayoutsAfterDelete.isNotEmpty()) {
+                    saveSelectedLayoutIndex(allLayoutsAfterDelete.size - 1)
+                } else if (allLayoutsAfterDelete.isEmpty()) {
+                    saveSelectedLayoutIndex(0)
                 }
-
-                // Update Order
-                val currentOrderStr = prefs[PrefKeys.LAYOUT_ORDER_IDS]
-                var orderRemoved = false
-                if (!currentOrderStr.isNullOrBlank()) {
-                    val currentOrder = currentOrderStr.split(',').filter { it.isNotBlank() }.toMutableList()
-                    if (currentOrder.remove(layoutId)) {
-                        prefs[PrefKeys.LAYOUT_ORDER_IDS] = currentOrder.joinToString(",")
-                        orderRemoved = true
-                        Log.i(TAG, "Removed '$layoutId' from order.")
-                    }
-                }
-
-                if (!definitionRemoved && !orderRemoved) {
-                    Log.w(TAG, "Attempted to delete non-existent layout ID: $layoutId")
-                } else {
-                    Log.i(TAG, "Successfully deleted layout '$layoutId'.")
-                }
+            } else {
+                Log.w(tag, "Attempted to delete non-existent layout ID: $layoutId")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error deleting layout '$layoutId'", e)
+            Log.e(tag, "Error deleting layout '$layoutId'", e)
         }
     }
 
-    /** Adds a new layout definition and updates the order. */
-    suspend fun addLayout(newDefinition: LayoutDefinition) {
+    /** Adds a new layout definition and its buttons (if any). */
+    suspend fun addLayout(
+        title: String,
+        layoutType: LayoutType,
+        iconName: String,
+        initialButtons: List<FreeFormItemState>? = null // For FREE_FORM layouts
+    ) {
         try {
-            context.layoutDataStore.edit { prefs ->
-                // Add to Definitions
-                val currentDefJson = prefs[PrefKeys.LAYOUT_DEFINITIONS]
-                val currentDefinitions = if (currentDefJson.isNullOrBlank()) {
-                    mutableMapOf()
-                } else {
-                    try {
-                        json.decodeFromString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefJson).toMutableMap()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error decoding definitions in addLayout, starting fresh.", e)
-                        mutableMapOf()
-                    }
-                }
-                // Check for ID collision (should be unlikely with UUID, but good practice)
-                if (currentDefinitions.containsKey(newDefinition.id)) {
-                    Log.e(TAG, "Layout ID collision detected for '${newDefinition.id}'. Aborting add.")
-                    return@edit // Or handle differently, e.g., generate new ID
-                }
-                currentDefinitions[newDefinition.id] = newDefinition
-                prefs[PrefKeys.LAYOUT_DEFINITIONS] = json.encodeToString(MapSerializer(String.serializer(), LayoutDefinition.serializer()), currentDefinitions)
-                Log.i(TAG, "Added layout definition for '${newDefinition.id}'.")
+            val currentLayouts = allLayoutsFlow.first()
+            val newOrderIndex = currentLayouts.size // Append to the end
 
-                // Add to Order (append to the end)
-                val currentOrderStr = prefs[PrefKeys.LAYOUT_ORDER_IDS]
-                val currentOrder = if (currentOrderStr.isNullOrBlank()) {
-                    mutableListOf()
-                } else {
-                    currentOrderStr.split(',').filter { it.isNotBlank() }.toMutableList()
-                }
-                currentOrder.add(newDefinition.id)
-                prefs[PrefKeys.LAYOUT_ORDER_IDS] = currentOrder.joinToString(",")
-                Log.i(TAG, "Added '${newDefinition.id}' to layout order.")
+            val newLayoutEntity = LayoutEntity(
+                id = if (layoutType == LayoutType.FREE_FORM) "freeform_${UUID.randomUUID()}" else layoutType.name.lowercase(),
+                title = title,
+                layoutTypeString = layoutType.name,
+                iconName = iconName,
+                isEnabled = true,
+                isUserDefined = layoutType == LayoutType.FREE_FORM, // Only FreeForm is user-defined for now
+                isDeletable = layoutType == LayoutType.FREE_FORM,   // Only FreeForm is deletable
+                orderIndex = newOrderIndex
+            )
+            layoutDao.insertLayout(newLayoutEntity)
+            Log.i(tag, "Added new layout: ${newLayoutEntity.title} (ID: ${newLayoutEntity.id})")
+
+            if (layoutType == LayoutType.FREE_FORM && initialButtons != null) {
+                saveLayoutItems(newLayoutEntity.id, initialButtons)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error adding layout '${newDefinition.id}'", e)
+            Log.e(tag, "Error adding layout '$title'", e)
         }
     }
 
+    /** Adds the default layouts to the Room database if it's the first launch and DB is empty. */
+    suspend fun addDefaultLayoutsIfFirstLaunch() {
+        val isFirstLaunch = settingDatasource.isFirstLaunchFlow.first()
+        if (isFirstLaunch) {
+            val currentLayouts = layoutDao.getAllLayoutsOrdered().first()
+            if (currentLayouts.isEmpty()) {
+                Log.i(tag, "First launch and no layouts in DB. Populating default layouts.")
+                try {
+                    // Normal Flight Layout
+                    val normalFlight = LayoutEntity(
+                        id = "normal_flight",
+                        title = "Flight Controls",
+                        layoutTypeString = LayoutType.NORMAL_FLIGHT.name,
+                        iconName = "RocketLaunch", // Updated icon name
+                        isEnabled = true, // Enable by default
+                        isUserDefined = false,
+                        isDeletable = false,
+                        orderIndex = 0
+                    )
+                    layoutDao.insertLayout(normalFlight)
 
-    /** Adds the default layouts to DataStore. Should only be called if layouts are confirmed empty. */
-    suspend fun addDefaultLayouts() {
-        Log.i(TAG, "Adding default layouts to DataStore.")
-        val defaultDefs = getDefaultLayoutDefinitions()
-        val defaultOrder = getDefaultLayoutOrderIds()
-        saveLayoutDefinitions(defaultDefs)
-        saveLayoutOrder(defaultOrder)
-        saveSelectedLayoutIndex(0)
+                    // Auto Drag & Drop Layout
+                    val autoDragDrop = LayoutEntity(
+                        id = "auto_drag_drop",
+                        title = "Auto Drag",
+                        layoutTypeString = LayoutType.AUTO_DRAG_AND_DROP.name,
+                        iconName = "Mouse", // Updated icon name
+                        isEnabled = true, // Enable by default
+                        isUserDefined = false,
+                        isDeletable = false,
+                        orderIndex = 1
+                    )
+                    layoutDao.insertLayout(autoDragDrop)
+
+                    // Example FreeForm Layout (Optional - can be added by user)
+                    val exampleFreeFormId = "freeform_example_${UUID.randomUUID()}"
+                    val exampleFreeForm = LayoutEntity(
+                        id = exampleFreeFormId,
+                        title = "My First Panel",
+                        layoutTypeString = LayoutType.FREE_FORM.name,
+                        iconName = "DashboardCustomize",
+                        isEnabled = true,
+                        isUserDefined = true,
+                        isDeletable = true,
+                        orderIndex = 2
+                    )
+                    layoutDao.insertLayout(exampleFreeForm)
+                    // Add some default buttons to this example FreeForm layout
+                    val defaultButtons = listOf(
+                        FreeFormItemState(id = exampleFreeFormId, text = "Button 1", gridCol = 0, gridRow = 0, gridWidth = 10, gridHeight = 4, macroId = null),
+                        FreeFormItemState(id = exampleFreeFormId, text = "Button 2", gridCol = 10, gridRow = 0, gridWidth = 10, gridHeight = 4, macroId = null)
+                    )
+                    saveLayoutItems(exampleFreeFormId, defaultButtons)
+
+
+                    Log.i(tag, "Default layouts populated into Room DB.")
+                    // SplashViewModel will call settingDatasource.setFirstLaunchCompleted()
+                } catch (e: Exception) {
+                    Log.e(tag, "Error populating default layouts into Room DB", e)
+                }
+            } else {
+                Log.d(tag, "Not first launch or layouts already exist in DB. Skipping default layout population.")
+            }
+        } else {
+            Log.d(tag, "Not first launch. Skipping default layout population.")
+        }
     }
-
-    // --- Default Data ---
-
-    private fun getDefaultLayoutOrderIds(): List<String> = listOf(
-        "normal_flight",
-        "auto_drag_drop" // Add new layout ID to the default order
-    )
-
-    private fun getDefaultLayoutDefinitions(): Map<String, LayoutDefinition> = mapOf(
-        "normal_flight" to LayoutDefinition(
-            id = "normal_flight",
-            title = "Normal Flight",
-            layoutType = LayoutType.NORMAL_FLIGHT,
-            iconName = "Rocket",
-            isEnabled = false,
-            isDeletable = false
-        ),
-        "auto_drag_drop" to LayoutDefinition( // New layout definition
-            id = "auto_drag_drop",
-            title = "Auto Drag & Drop",
-            layoutType = LayoutType.AUTO_DRAG_AND_DROP,
-            iconName = "Mouse",
-            isEnabled = false,
-            isDeletable = false
-        )
-    )
 }
