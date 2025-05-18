@@ -39,14 +39,6 @@ import androidx.compose.ui.window.Dialog
 import com.ongxeno.android.starbuttonbox.ui.screen.managelayout.ManageLayoutInfo
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 
-/**
- * Dialog for adding OR editing a FreeForm layout.
- *
- * @param onDismissRequest Lambda called when the dialog should be dismissed.
- * @param onConfirm Lambda called when the user confirms adding/saving the layout.
- * Provides the chosen title, icon name string, and the existing layout ID (null if adding).
- * @param layoutToEdit Optional LayoutInfo object. If provided, dialog enters 'Edit' mode.
- */
 @Composable
 fun AddEditLayoutDialog(
     onDismissRequest: () -> Unit,
@@ -54,13 +46,12 @@ fun AddEditLayoutDialog(
     layoutToEdit: ManageLayoutInfo? = null
 ) {
     val isEditMode = layoutToEdit != null
-    var title by remember { mutableStateOf(layoutToEdit?.title ?: "") }
-    var selectedIcon by remember {
-        mutableStateOf(layoutToEdit?.iconName?.let {
-            IconMapper.getIconVector(
-                it
-            )
-        } ?: Icons.Filled.DashboardCustomize)
+    var title by remember(layoutToEdit?.id) { mutableStateOf(layoutToEdit?.title ?: "") }
+    var selectedIcon by remember(layoutToEdit?.id) {
+        mutableStateOf(
+            layoutToEdit?.iconName?.let { IconMapper.getIconVector(it) }
+                ?: Icons.Filled.DashboardCustomize // Default icon
+        )
     }
     val isTitleValid by remember(title) { derivedStateOf { title.isNotBlank() } }
 
@@ -81,7 +72,6 @@ fun AddEditLayoutDialog(
                 Text(dialogTitle, style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Title Input
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -91,19 +81,22 @@ fun AddEditLayoutDialog(
                     isError = !isTitleValid && title.isNotEmpty()
                 )
                 if (!isTitleValid && title.isNotEmpty()) {
-                    Text("Title cannot be empty", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Title cannot be empty",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Select Icon:", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Icon Selection Grid
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 48.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 200.dp),
+                        .heightIn(max = 200.dp), // Limit height of the grid
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -120,7 +113,7 @@ fun AddEditLayoutDialog(
                                     color = if (selectedIcon == icon) MaterialTheme.colorScheme.primary else Color.Transparent,
                                     shape = MaterialTheme.shapes.small
                                 )
-                                .padding(2.dp),
+                                .padding(2.dp), // Inner padding after border
                             tint = if (selectedIcon == icon) MaterialTheme.colorScheme.primary else LocalContentColor.current
                         )
                     }
@@ -128,7 +121,6 @@ fun AddEditLayoutDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Action Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -139,12 +131,11 @@ fun AddEditLayoutDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            // Pass back the title, icon name, and the existing ID (null if adding)
                             onConfirm(title.trim(), IconMapper.getIconName(selectedIcon), layoutToEdit?.id)
                         },
                         enabled = isTitleValid
                     ) {
-                        Text(confirmButtonText) // Use dynamic button text
+                        Text(confirmButtonText)
                     }
                 }
             }
