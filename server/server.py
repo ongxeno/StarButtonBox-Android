@@ -1,7 +1,5 @@
 # server.py
 # Main script for the StarButtonBox PC server.
-# Refactored to be controllable by a GUI, run in a separate thread,
-# and provide callbacks for logging and status updates.
 
 import socket
 import json
@@ -9,60 +7,73 @@ import time
 import sys
 import signal
 import threading
-import logging # Using the logging module
+import logging 
 from concurrent.futures import ThreadPoolExecutor
 
-# Import modules from the project structure
 import config
 import input_simulator
-import mdns_handler
+import mdns_handler 
 import dialog_handler
 import auto_drag_handler
+import config_manager # Import config_manager to get the log path
 
-# --- Global Variables for Server Control ---
 server_thread = None
 stop_server_event = threading.Event()
-server_socket = None # Made global to be accessible by stop_server
-executor = None # ThreadPoolExecutor for macro commands
+server_socket = None 
+executor = None 
 
 # --- Logging Setup ---
-# Basic configuration for file logging. GUI can add its own handler.
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(threadName)s - %(levelname)s - %(message)s',
-    filename='server.log', # Log to a file
-    filemode='a' # Append to the log file
-)
-# Create a logger instance
-logger = logging.getLogger("StarButtonBoxServer")
+# Use the LOG_FILE_PATH from config_manager
+# Ensure config_manager.APP_SETTINGS_DIR is initialized before this logging setup if server.py is run directly
+# This typically happens when config_manager is imported and its top-level code runs.
+try:
+    # Ensure the directory for the log file exists
+    log_dir = os.path.dirname(config_manager.LOG_FILE_PATH)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        print(f"Created log directory: {log_dir}") # Print for direct run scenario
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', # Changed from threadName for broader scope
+        filename=config_manager.LOG_FILE_PATH, 
+        filemode='a' 
+    )
+except Exception as e:
+    # Fallback logging to console if file setup fails
+    print(f"Error setting up file logging to {config_manager.LOG_FILE_PATH}: {e}. Logging to console.", file=sys.stderr)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        stream=sys.stdout # Log to stdout if file logging fails
+    )
 
-# --- Callback Placeholders ---
-# These will be set by the GUI when it starts the server.
+logger = logging.getLogger("StarButtonBoxServer") # Get logger instance
+
 log_to_gui_callback = None
 update_gui_status_callback = None
 
+# ... (rest of your server.py code remains the same) ...
+# Make sure to replace the old logging.basicConfig call with the block above.
+
+# Example of how _server_loop_task would look (no changes needed inside this function itself
+# regarding logging, as it uses the 'logger' instance which is now configured globally)
 def _server_loop_task(port_to_use, mdns_service_enabled):
-    """
-    The main task that runs in the server_thread.
-    Handles socket binding, mDNS, and packet listening.
-    """
     global server_socket, executor, log_to_gui_callback, update_gui_status_callback
 
-    # Initialize ThreadPoolExecutor for macro commands within this thread's context if needed
-    # Or ensure the global one is used carefully. For simplicity, using the global one.
-    if executor is None: # Should be initialized by start_server before thread starts
+    if executor is None: 
         logger.error("ThreadPoolExecutor not initialized before server loop task.")
         if update_gui_status_callback:
             update_gui_status_callback("Error: Executor not ready.")
         return
 
     if mdns_service_enabled:
-        if not mdns_handler.register_mdns_service():
+        if not mdns_handler.register_mdns_service(port_to_use): 
             logger.warning("Failed to initialize mDNS. Server will run without mDNS.")
             if update_gui_status_callback:
                 update_gui_status_callback(f"Running on Port {port_to_use} (mDNS Failed)")
         else:
-            logger.info("mDNS service registered successfully.")
+            logger.info(f"mDNS service registered successfully for port {port_to_use}.")
             if update_gui_status_callback:
                  update_gui_status_callback(f"Running on Port {port_to_use} (mDNS Active)")
     else:
@@ -73,23 +84,21 @@ def _server_loop_task(port_to_use, mdns_service_enabled):
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.bind(('0.0.0.0', port_to_use))
-        # Set a timeout so that recvfrom doesn't block indefinitely,
-        # allowing the stop_server_event to be checked periodically.
-        server_socket.settimeout(1.0) # 1 second timeout
+        server_socket.settimeout(1.0) 
         logger.info(f"UDP server listening on port {port_to_use}...")
         if log_to_gui_callback:
             log_to_gui_callback(f"INFO: UDP server listening on port {port_to_use}...")
 
     except Exception as e:
-        logger.error(f"Critical error binding server socket to port {port_to_use}: {e}")
+        logger.error(f"Critical error binding server socket to port {port_to_use}: {e}", exc_info=True)
         if log_to_gui_callback:
             log_to_gui_callback(f"ERROR: Could not bind to port {port_to_use}: {e}")
         if update_gui_status_callback:
             update_gui_status_callback(f"Error: Port {port_to_use} in use?")
-        mdns_handler.unregister_mdns_service() # Clean up mDNS if it was started
+        if mdns_service_enabled:
+            mdns_handler.unregister_mdns_service() 
         return
 
-    # Main Listening Loop
     while not stop_server_event.is_set():
         try:
             data_bytes, addr = server_socket.recvfrom(config.BUFFER_SIZE)
@@ -107,14 +116,13 @@ def _server_loop_task(port_to_use, mdns_service_enabled):
             packet_type = packet_data.get('type')
             packet_id = packet_data.get('packetId')
             payload_str = packet_data.get('payload')
+            
+            gui_log_entry = f"RX: {packet_type} (ID: {packet_id})"
+            logger.info(f"Received packet: Type='{packet_type}', ID='{packet_id}', From={addr}, Payload='{str(payload_str)[:50]}...'")
+            if log_to_gui_callback:
+                log_to_gui_callback(f"INFO: {gui_log_entry}")
 
-            log_message = f"Received packet: Type='{packet_type}', ID='{packet_id}', From={addr}"
-            logger.info(log_message)
-            if log_to_gui_callback: # Send to GUI
-                log_to_gui_callback(f"INFO: {log_message}")
-
-
-            # Packet Handling Logic (Simplified for brevity, same as before but using logger)
+            # ... (rest of packet handling logic) ...
             if packet_type == config.PACKET_TYPE_HEALTH_CHECK_PING:
                 if packet_id:
                     pong_timestamp = int(time.time() * 1000)
@@ -159,9 +167,6 @@ def _server_loop_task(port_to_use, mdns_service_enabled):
                         trigger_data = json.loads(payload_str)
                         url_to_open = trigger_data.get('url')
                         if url_to_open:
-                            # dialog_handler.trigger_pc_browser is synchronous for printing,
-                            # but webbrowser.open might be better in a thread if it blocks.
-                            # For now, keeping it simple.
                             dialog_handler.trigger_pc_browser(url_to_open)
                         else:
                             logger.error("Missing 'url' in TRIGGER_IMPORT_BROWSER payload.")
@@ -204,36 +209,26 @@ def _server_loop_task(port_to_use, mdns_service_enabled):
             else:
                 logger.warning(f"Unknown packet type '{packet_type}'.")
 
+
         except socket.timeout:
-            # This is expected due to settimeout(1.0)
-            # Allows the loop to check stop_server_event.is_set()
             continue
         except UnicodeDecodeError:
             logger.error(f"Cannot decode UTF-8 from {addr if 'addr' in locals() else 'unknown sender'}.")
         except Exception as loop_e:
-            logger.error(f"Error processing packet from {addr if 'addr' in locals() else 'unknown sender'}: {loop_e}")
-        sys.stdout.flush() # Ensure logs are written
+            logger.error(f"Error processing packet from {addr if 'addr' in locals() else 'unknown sender'}: {loop_e}", exc_info=True)
 
-    # Loop finished (stop_server_event was set)
     logger.info("Server loop task stopping.")
     if server_socket:
         server_socket.close()
         logger.info("Server socket closed in loop task.")
-    mdns_handler.unregister_mdns_service()
-    logger.info("mDNS service unregistered in loop task.")
+    if mdns_service_enabled:
+        mdns_handler.unregister_mdns_service()
+        logger.info("mDNS service unregistered in loop task.")
     if update_gui_status_callback:
         update_gui_status_callback("Server Stopped")
 
 
 def start_server(port, mdns_enabled, gui_log_cb, gui_status_cb):
-    """
-    Starts the server in a new thread.
-    Args:
-        port (int): The port number for the server to listen on.
-        mdns_enabled (bool): Whether to enable mDNS service registration.
-        gui_log_cb (function): Callback to send log messages to the GUI.
-        gui_status_cb (function): Callback to update server status in the GUI.
-    """
     global server_thread, stop_server_event, executor
     global log_to_gui_callback, update_gui_status_callback
 
@@ -246,18 +241,16 @@ def start_server(port, mdns_enabled, gui_log_cb, gui_status_cb):
             log_to_gui_callback("WARN: Server is already running.")
         return False
 
-    # Initialize ThreadPoolExecutor if not already (e.g. first start)
-    if executor is None or executor._shutdown: # Check if it was shutdown previously
+    if executor is None or executor._shutdown: 
         executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix='MacroWorker')
         logger.info(f"ThreadPoolExecutor initialized/re-initialized with max_workers={executor._max_workers}")
 
-
-    stop_server_event.clear() # Clear the stop event before starting
+    stop_server_event.clear() 
     server_thread = threading.Thread(
         target=_server_loop_task,
         args=(port, mdns_enabled),
         name="ServerLoopThread",
-        daemon=True # Daemon thread will exit when main program exits
+        daemon=True 
     )
     server_thread.start()
     logger.info(f"Server thread started. Target port: {port}, mDNS: {mdns_enabled}")
@@ -268,7 +261,6 @@ def start_server(port, mdns_enabled, gui_log_cb, gui_status_cb):
     return True
 
 def stop_server():
-    """Stops the server thread and cleans up resources."""
     global server_thread, stop_server_event, server_socket, executor
     global log_to_gui_callback, update_gui_status_callback
 
@@ -276,14 +268,12 @@ def stop_server():
     if log_to_gui_callback:
         log_to_gui_callback("INFO: Attempting to stop server...")
 
-    stop_server_event.set() # Signal the server loop to stop
-
-    # Stop the auto_drag_handler's loop as well
+    stop_server_event.set() 
     auto_drag_handler.stop_auto_drag_loop()
 
     if server_thread and server_thread.is_alive():
         logger.info("Waiting for server thread to join...")
-        server_thread.join(timeout=3.0) # Wait for the thread to finish
+        server_thread.join(timeout=3.0) 
         if server_thread.is_alive():
             logger.warning("Server thread did not join in time.")
             if log_to_gui_callback:
@@ -297,8 +287,6 @@ def stop_server():
         if log_to_gui_callback:
             log_to_gui_callback("INFO: Server was not running.")
 
-
-    # Socket is closed inside _server_loop_task, but as a fallback:
     if server_socket:
         try:
             server_socket.close()
@@ -307,48 +295,15 @@ def stop_server():
             logger.error(f"Error closing server socket in stop_server: {e}")
     server_socket = None
 
-    # mDNS is unregistered inside _server_loop_task, but as a fallback:
-    mdns_handler.unregister_mdns_service() # Ensure mDNS is unregistered
+    mdns_handler.unregister_mdns_service() 
 
     if executor and not executor._shutdown:
         logger.info("Shutting down ThreadPoolExecutor...")
-        executor.shutdown(wait=True) # Wait for pending tasks
+        executor.shutdown(wait=True) 
         logger.info("ThreadPoolExecutor shutdown complete.")
-    executor = None # Allow re-initialization on next start
+    executor = None 
 
     if update_gui_status_callback:
         update_gui_status_callback("Server Stopped")
     logger.info("Server stop process complete.")
-
-# The old main() function is removed as server_gui.py will be the entry point.
-# If you need to run this script directly for testing without the GUI:
-#
-# def simple_log_callback(message):
-#     print(f"GUI_LOG: {message}", file=sys.stderr)
-#
-# def simple_status_callback(status):
-#     print(f"GUI_STATUS: {status}", file=sys.stderr)
-#
-# if __name__ == "__main__":
-#     print("Starting server directly for testing (no GUI)...")
-#     # Load settings to get port and mDNS status
-#     import config_manager
-#     settings = config_manager.load_settings()
-#     test_port = settings.get("server_port", config.COMMAND_PORT)
-#     test_mdns = settings.get("mdns_enabled", True)
-#
-#     start_server(test_port, test_mdns, simple_log_callback, simple_status_callback)
-#
-#     # Keep main thread alive, listen for Ctrl+C
-#     try:
-#         while True:
-#             if not server_thread or not server_thread.is_alive():
-#                 print("Server thread appears to have stopped. Exiting test.")
-#                 break
-#             time.sleep(1)
-#     except KeyboardInterrupt:
-#         print("\nCtrl+C received. Shutting down server...")
-#     finally:
-#         stop_server()
-#         print("Test server shutdown complete.")
 
