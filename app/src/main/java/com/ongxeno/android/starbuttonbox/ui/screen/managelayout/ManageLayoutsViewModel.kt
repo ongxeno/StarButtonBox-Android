@@ -17,7 +17,7 @@ import com.ongxeno.android.starbuttonbox.data.LayoutDefinition
 import com.ongxeno.android.starbuttonbox.data.LayoutType
 import com.ongxeno.android.starbuttonbox.datasource.ConnectionManager
 import com.ongxeno.android.starbuttonbox.datasource.LayoutRepository
-import com.ongxeno.android.starbuttonbox.datasource.PcImportWebServer // <-- Import Ktor Web Server
+import com.ongxeno.android.starbuttonbox.datasource.AppLocalWebServer // <-- Import Ktor Web Server
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
@@ -47,7 +46,7 @@ import javax.inject.Inject
 class ManageLayoutsViewModel @Inject constructor(
     private val layoutRepository: LayoutRepository,
     private val connectionManager: ConnectionManager, // <-- Inject ConnectionManager
-    private val pcImportWebServer: PcImportWebServer, // <-- Inject PcImportWebServer
+    private val appLocalWebServer: AppLocalWebServer, // <-- Inject PcImportWebServer
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -329,7 +328,7 @@ class ManageLayoutsViewModel @Inject constructor(
         _importFromPcStatusMessage.value = "Starting import server..."
 
         viewModelScope.launch { // Launch in VM scope for suspend functions
-            val serverUrl = pcImportWebServer.startServer(::handleReceivedLayoutJson)
+            val serverUrl = appLocalWebServer.startServer(AppLocalWebServer.ServerMode.LAYOUT_IMPORT, ::handleReceivedLayoutJson)
 
             if (serverUrl != null) {
                 Log.i(_tag, "PC Import Server started at: $serverUrl")
@@ -396,7 +395,7 @@ class ManageLayoutsViewModel @Inject constructor(
                 _importResult.value = ImportResult.Failure("Error processing import: ${e.localizedMessage}")
             } finally {
                 // 4. Stop the Ktor server
-                pcImportWebServer.stopServer()
+                appLocalWebServer.stopServer()
                 Log.d(_tag, "Stopped Ktor server after handling JSON.")
 
                 _importFromPcStatusMessage.value = null
@@ -419,7 +418,7 @@ class ManageLayoutsViewModel @Inject constructor(
     fun cancelPcImport() {
         Log.d(_tag, "Cancelling Import from PC")
         viewModelScope.launch {
-            pcImportWebServer.stopServer() // Stop the Ktor server
+            appLocalWebServer.stopServer() // Stop the Ktor server
         }
         _showImportFromPcDialog.value = false
         _importFromPcStatusMessage.value = null
@@ -432,7 +431,7 @@ class ManageLayoutsViewModel @Inject constructor(
         super.onCleared()
         Log.d(_tag, "ManageLayoutsViewModel cleared. Stopping Ktor server if running.")
         viewModelScope.launch {
-            pcImportWebServer.stopServer()
+            appLocalWebServer.stopServer()
         }
     }
 }

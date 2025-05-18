@@ -38,6 +38,8 @@ class SettingDatasource(private val context: Context) {
         val IS_FIRST_LAUNCH = booleanPreferencesKey("is_first_launch") // Made public for ViewModel access
         // Logging tag
         private const val TAG = "SettingDatasource"
+
+        const val TARGET_PORT_DEFAULT = 58009
     }
 
     /**
