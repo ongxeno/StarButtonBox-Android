@@ -39,15 +39,14 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.data.Macro
+import com.ongxeno.android.starbuttonbox.data.toSimplifiedString // Import the new extension function
 
-/**
- * Screen for managing (viewing) macros with search functionality in the AppBar.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManageMacrosScreen(
@@ -76,32 +75,31 @@ fun ManageMacrosScreen(
             TopAppBar(
                 title = {
                     if (isSearchActive) {
-                        TextField( // Using BasicTextField or TextField for more control
+                        TextField(
                             value = searchTerm,
                             onValueChange = { viewModel.onSearchTermChanged(it) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .focusRequester(focusRequester)
-                                .padding(end = 0.dp), // Remove padding to allow clear button to be closer
+                                .padding(end = 0.dp),
                             placeholder = { Text("Search Macros...") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = {
                                 keyboardController?.hide()
-                                // Optionally, trigger search explicitly if needed, though debounce handles it
                             }),
-                            colors = TextFieldDefaults.colors( // Use colors for TextField
+                            colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
                                 disabledContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent, // No underline
-                                unfocusedIndicatorColor = Color.Transparent, // No underline
-                                disabledIndicatorColor = Color.Transparent, // No underline
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent,
                                 focusedTextColor = MaterialTheme.colorScheme.onSurface,
                                 unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                             ),
                             textStyle = MaterialTheme.typography.titleMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface // Ensure text color matches theme
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         )
                     } else {
@@ -111,13 +109,12 @@ fun ManageMacrosScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         if (isSearchActive) {
-                            viewModel.setSearchActive(false) // Deactivate search and clear term
+                            viewModel.setSearchActive(false)
                         } else {
                             onNavigateBack()
                         }
                     }) {
                         Icon(
-                            // Show back arrow normally, or if search is active (acts as "close search")
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = if (isSearchActive) "Close Search" else "Back"
                         )
@@ -125,22 +122,14 @@ fun ManageMacrosScreen(
                 },
                 actions = {
                     if (isSearchActive) {
-                        // Clear button for the search text field
                         if (searchTerm.isNotEmpty()) {
                             IconButton(onClick = { viewModel.onSearchTermChanged("") }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Clear,
-                                    contentDescription = "Clear Search Text"
-                                )
+                                Icon(Icons.Filled.Clear, "Clear Search Text")
                             }
                         }
                     } else {
-                        // Search action icon to activate search mode
                         IconButton(onClick = { viewModel.setSearchActive(true) }) {
-                            Icon(
-                                imageVector = Icons.Filled.Search,
-                                contentDescription = "Search Macros"
-                            )
+                            Icon(Icons.Filled.Search, "Search Macros")
                         }
                     }
                 },
@@ -150,12 +139,7 @@ fun ManageMacrosScreen(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // Fixed Header Row (No changes here)
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -165,12 +149,12 @@ fun ManageMacrosScreen(
             ) {
                 Text("#", Modifier.width(rowNumberColumnWidth), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
                 Text("Title", Modifier.weight(1f).padding(start = 8.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                Text("Action", Modifier.weight(1.5f).padding(start = 8.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall) // New Column Header
                 Text("Description", Modifier.weight(1.5f).padding(start = 8.dp), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
             }
 
-            // Scrollable Content (No changes here, uses filteredMacros)
             if (filteredMacros.isEmpty()) {
-                val message = if (searchTerm.isBlank() && !isSearchActive) { // Adjusted condition
+                val message = if (searchTerm.isBlank() && !isSearchActive) {
                     "No macros found."
                 } else {
                     "No macros match your search for \"$searchTerm\"."
@@ -179,7 +163,11 @@ fun ManageMacrosScreen(
             } else {
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     itemsIndexed(filteredMacros, key = { _, macro -> macro.id }) { index, macro ->
-                        MacroListItem(index = index, macro = macro, rowNumberWidth = rowNumberColumnWidth)
+                        MacroListItem(
+                            index = index,
+                            macro = macro,
+                            rowNumberWidth = rowNumberColumnWidth
+                        )
                         HorizontalDivider()
                     }
                 }
@@ -197,7 +185,16 @@ private fun MacroListItem(index: Int, macro: Macro, rowNumberWidth: Dp) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text((index + 1).toString(), Modifier.width(rowNumberWidth), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-        Text(macro.title, Modifier.weight(1f).padding(start = 8.dp, end = 8.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        Text(macro.description, Modifier.weight(1.5f), style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text(macro.title, Modifier.weight(1f).padding(start = 8.dp, end = 8.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        // New Text field for simplified action
+        Text(
+            text = macro.effectiveInputAction.toSimplifiedString(),
+            modifier = Modifier.weight(1.5f).padding(horizontal = 8.dp), // Added horizontal padding
+            style = MaterialTheme.typography.bodySmall, // Slightly smaller text for action details
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant // Muted color for less emphasis
+        )
+        Text(macro.description, Modifier.weight(1.5f).padding(start = 8.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
     }
 }
