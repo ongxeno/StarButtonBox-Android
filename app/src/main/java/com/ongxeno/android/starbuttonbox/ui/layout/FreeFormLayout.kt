@@ -79,6 +79,7 @@ private const val TAG_LAYOUT_DRAG = "FreeFormLayoutDrag"
 fun FreeFormLayout(
     viewModel: MainViewModel,
     sendMacroViewModel: SendMacroViewModel,
+    layoutId: String,
     modifier: Modifier = Modifier,
 ) {
     val itemsStateFromViewModel by viewModel.currentFreeFormItemsState.collectAsStateWithLifecycle()
@@ -87,7 +88,7 @@ fun FreeFormLayout(
     val editableItemsState = remember { mutableStateListOf<FreeFormItemState>() }
     var hasUnsavedChanges by remember { mutableStateOf(false) }
 
-    var isLocked by rememberSaveable { mutableStateOf(true) }
+    var isLocked by rememberSaveable(layoutId) { mutableStateOf(true) }
     var showAddEditDialog by remember { mutableStateOf(false) }
     var editingItemState by remember { mutableStateOf<FreeFormItemState?>(null) }
 
@@ -98,11 +99,13 @@ fun FreeFormLayout(
     val density = LocalDensity.current
     val minTouchTargetSizePx = with(density) { MIN_TOUCH_TARGET_SIZE_DP.dp.toPx() }
 
-    LaunchedEffect(itemsStateFromViewModel, isLocked) {
+    LaunchedEffect(itemsStateFromViewModel, isLocked, layoutId) {
+        // currentLayoutId is now non-nullable, direct usage
         if (isLocked || !hasUnsavedChanges) {
             val viewModelList = itemsStateFromViewModel
             val localList = editableItemsState.toList()
             if (viewModelList != localList) {
+                Log.d(TAG_LAYOUT_DRAG, "Syncing local state for layout $layoutId from ViewModel. Locked: $isLocked, Unsaved: $hasUnsavedChanges. VM size: ${viewModelList.size}, Local size: ${localList.size}")
                 editableItemsState.clear()
                 editableItemsState.addAll(viewModelList)
                 hasUnsavedChanges = false
@@ -113,7 +116,6 @@ fun FreeFormLayout(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            // Ensure the root of FreeFormLayout has a background to consume touches
             .background(MaterialTheme.colorScheme.background)
     ) {
         val maxWidthPx = constraints.maxWidth.toFloat()
@@ -185,7 +187,6 @@ fun FreeFormLayout(
                                         if (currentLocalState.gridCol != clampedCol || currentLocalState.gridRow != clampedRow) {
                                             editableItemsState[index] = currentLocalState.copy(gridCol = clampedCol, gridRow = clampedRow)
                                             hasUnsavedChanges = true
-                                            Log.d(TAG_LAYOUT_DRAG, "Item $itemId DRAGGED to $clampedCol, $clampedRow. Has Unsaved: $hasUnsavedChanges")
                                         }
                                         currentDragVisualOffset = Offset.Zero; interactingItemId = null
                                     },
@@ -225,7 +226,6 @@ fun FreeFormLayout(
                                                     if (currentLocalState.gridWidth != clampedWidthCells || currentLocalState.gridHeight != clampedHeightCells) {
                                                         editableItemsState[index] = currentLocalState.copy(gridWidth = clampedWidthCells, gridHeight = clampedHeightCells)
                                                         hasUnsavedChanges = true
-                                                        Log.d(TAG_LAYOUT_DRAG, "Item $itemId RESIZED to ${clampedWidthCells}x${clampedHeightCells}. Has Unsaved: $hasUnsavedChanges")
                                                     }
                                                     currentResizeVisualDelta = Offset.Zero; interactingItemId = null
                                                 },
@@ -264,8 +264,9 @@ fun FreeFormLayout(
                     onClick = {
                         if (!isLocked) {
                             if (hasUnsavedChanges) {
-                                Log.i(TAG_LAYOUT_DRAG, "Locking layout and SAVING ${editableItemsState.size} items.")
-                                viewModel.saveFreeFormLayout(editableItemsState.toList())
+                                // currentLayoutId is now non-nullable, direct use
+                                Log.i(TAG_LAYOUT_DRAG, "Locking layout $layoutId and SAVING ${editableItemsState.size} items.")
+                                viewModel.saveFreeFormLayout(layoutId, editableItemsState.toList())
                                 hasUnsavedChanges = false
                             } else {
                                 Log.d(TAG_LAYOUT_DRAG, "Locking layout, no unsaved changes.")
@@ -273,7 +274,7 @@ fun FreeFormLayout(
                         } else {
                             Log.d(TAG_LAYOUT_DRAG, "Unlocking layout.")
                             if (editableItemsState.toList() != itemsStateFromViewModel) {
-                                Log.d(TAG_LAYOUT_DRAG,"Syncing local state from ViewModel on unlock as they differ.")
+                                Log.d(TAG_LAYOUT_DRAG,"Syncing local state from ViewModel on unlock as they differ for layout $layoutId.")
                                 editableItemsState.clear(); editableItemsState.addAll(itemsStateFromViewModel); hasUnsavedChanges = false
                             }
                         }
@@ -288,7 +289,7 @@ fun FreeFormLayout(
         }
     }
 
-    if (showAddEditDialog) { // Ensure this uses the local showAddEditDialog state
+    if (showAddEditDialog) {
         AddEditButtonDialog(
             showDialog = showAddEditDialog,
             onDismiss = { showAddEditDialog = false },
@@ -301,19 +302,16 @@ fun FreeFormLayout(
                     if (index != -1) {
                         editableItemsState[index] = editableItemsState[index].copy(text = text, macroId = macroId, type = type, textSizeSp = textSizeSp, backgroundColorHex = backgroundColorHex)
                         hasUnsavedChanges = true
-                        Log.d(TAG_LAYOUT_DRAG, "Updated item $currentEditId locally. Has Unsaved: $hasUnsavedChanges")
                     }
                 } else {
                     editableItemsState.add(FreeFormItemState(text = text, macroId = macroId, type = type, textSizeSp = textSizeSp, backgroundColorHex = backgroundColorHex))
                     hasUnsavedChanges = true
-                    Log.d(TAG_LAYOUT_DRAG, "Added new item locally. Has Unsaved: $hasUnsavedChanges")
                 }
                 showAddEditDialog = false
             },
             onDelete = { itemId ->
                 if (editableItemsState.removeIf { it.id == itemId }) {
                     hasUnsavedChanges = true
-                    Log.d(TAG_LAYOUT_DRAG, "Deleted item $itemId locally. Has Unsaved: $hasUnsavedChanges")
                 }
                 showAddEditDialog = false
             }

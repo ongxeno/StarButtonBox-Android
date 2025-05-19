@@ -207,7 +207,8 @@ private fun ActualLayoutContent(layoutInfo: LayoutInfo, mainViewModel: MainViewM
         LayoutType.FREE_FORM -> {
             FreeFormLayout(
                 viewModel = mainViewModel,
-                sendMacroViewModel = hiltViewModel()
+                sendMacroViewModel = hiltViewModel(),
+                layoutId = layoutInfo.id
             )
         }
         LayoutType.DEMO -> DemoLayout()

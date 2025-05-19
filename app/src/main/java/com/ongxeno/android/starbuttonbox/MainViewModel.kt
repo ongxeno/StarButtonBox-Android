@@ -234,14 +234,10 @@ class MainViewModel @Inject constructor(
 
     fun cancelAddLayout() { _showAddLayoutDialog.value = false }
 
-    fun saveFreeFormLayout(items: List<FreeFormItemState>) {
+    fun saveFreeFormLayout(layoutId: String, items: List<FreeFormItemState>) {
         viewModelScope.launch {
-            val layoutId = selectedLayoutIdFlow.first()
-            if (layoutId != null) {
-                layoutRepository.saveLayoutItems(layoutId, items)
-            } else {
-                Log.w(_tag, "saveFreeFormLrrrrrrrayout: Cannot save, selectedLayoutId is null.")
-            }
+            Log.i(_tag, "saveFreeFormLayout: Saving ${items.size} items for layout ID: $layoutId")
+            layoutRepository.saveLayoutItems(layoutId, items)
         }
     }
 
