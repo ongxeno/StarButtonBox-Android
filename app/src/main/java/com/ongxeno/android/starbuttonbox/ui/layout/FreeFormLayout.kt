@@ -1,5 +1,6 @@
 package com.ongxeno.android.starbuttonbox.ui.layout
 
+import android.annotation.SuppressLint
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -47,7 +48,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.times
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
 import com.ongxeno.android.starbuttonbox.data.FreeFormItemState
@@ -72,8 +72,9 @@ private val handleVisualSize = 24.dp
 private val handleIconSizeMultiplier = 0.5f
 private const val MIN_TOUCH_TARGET_SIZE_DP = 48
 
-private const val TAG_LAYOUT_DRAG = "FreeFormLayoutDrag" // Consistent Tag
+private const val TAG_LAYOUT_DRAG = "FreeFormLayoutDrag"
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun FreeFormLayout(
     viewModel: MainViewModel,
@@ -102,7 +103,6 @@ fun FreeFormLayout(
             val viewModelList = itemsStateFromViewModel
             val localList = editableItemsState.toList()
             if (viewModelList != localList) {
-                Log.d(TAG_LAYOUT_DRAG, "Syncing local state from ViewModel. Locked: $isLocked, Unsaved: $hasUnsavedChanges. VM size: ${viewModelList.size}, Local size: ${localList.size}")
                 editableItemsState.clear()
                 editableItemsState.addAll(viewModelList)
                 hasUnsavedChanges = false
@@ -110,7 +110,12 @@ fun FreeFormLayout(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            // Ensure the root of FreeFormLayout has a background to consume touches
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         val maxWidthPx = constraints.maxWidth.toFloat()
         val maxHeightPx = constraints.maxHeight.toFloat()
         val cellWidthPx = if (GRID_COLUMNS > 0 && maxWidthPx > 0) maxWidthPx / GRID_COLUMNS else 0f
@@ -283,33 +288,35 @@ fun FreeFormLayout(
         }
     }
 
-    AddEditButtonDialog(
-        showDialog = showAddEditDialog,
-        onDismiss = { showAddEditDialog = false },
-        initialItemState = editingItemState,
-        availableMacros = availableMacros,
-        onSave = { text, macroId, type, textSizeSp, backgroundColorHex ->
-            val currentEditId = editingItemState?.id
-            if (currentEditId != null) {
-                val index = editableItemsState.indexOfFirst { it.id == currentEditId }
-                if (index != -1) {
-                    editableItemsState[index] = editableItemsState[index].copy(text = text, macroId = macroId, type = type, textSizeSp = textSizeSp, backgroundColorHex = backgroundColorHex)
+    if (showAddEditDialog) { // Ensure this uses the local showAddEditDialog state
+        AddEditButtonDialog(
+            showDialog = showAddEditDialog,
+            onDismiss = { showAddEditDialog = false },
+            initialItemState = editingItemState,
+            availableMacros = availableMacros,
+            onSave = { text, macroId, type, textSizeSp, backgroundColorHex ->
+                val currentEditId = editingItemState?.id
+                if (currentEditId != null) {
+                    val index = editableItemsState.indexOfFirst { it.id == currentEditId }
+                    if (index != -1) {
+                        editableItemsState[index] = editableItemsState[index].copy(text = text, macroId = macroId, type = type, textSizeSp = textSizeSp, backgroundColorHex = backgroundColorHex)
+                        hasUnsavedChanges = true
+                        Log.d(TAG_LAYOUT_DRAG, "Updated item $currentEditId locally. Has Unsaved: $hasUnsavedChanges")
+                    }
+                } else {
+                    editableItemsState.add(FreeFormItemState(text = text, macroId = macroId, type = type, textSizeSp = textSizeSp, backgroundColorHex = backgroundColorHex))
                     hasUnsavedChanges = true
-                    Log.d(TAG_LAYOUT_DRAG, "Updated item $currentEditId locally. Has Unsaved: $hasUnsavedChanges")
+                    Log.d(TAG_LAYOUT_DRAG, "Added new item locally. Has Unsaved: $hasUnsavedChanges")
                 }
-            } else {
-                editableItemsState.add(FreeFormItemState(text = text, macroId = macroId, type = type, textSizeSp = textSizeSp, backgroundColorHex = backgroundColorHex))
-                hasUnsavedChanges = true
-                Log.d(TAG_LAYOUT_DRAG, "Added new item locally. Has Unsaved: $hasUnsavedChanges")
+                showAddEditDialog = false
+            },
+            onDelete = { itemId ->
+                if (editableItemsState.removeIf { it.id == itemId }) {
+                    hasUnsavedChanges = true
+                    Log.d(TAG_LAYOUT_DRAG, "Deleted item $itemId locally. Has Unsaved: $hasUnsavedChanges")
+                }
+                showAddEditDialog = false
             }
-            showAddEditDialog = false
-        },
-        onDelete = { itemId ->
-            if (editableItemsState.removeIf { it.id == itemId }) {
-                hasUnsavedChanges = true
-                Log.d(TAG_LAYOUT_DRAG, "Deleted item $itemId locally. Has Unsaved: $hasUnsavedChanges")
-            }
-            showAddEditDialog = false
-        }
-    )
+        )
+    }
 }

@@ -1,6 +1,7 @@
 package com.ongxeno.android.starbuttonbox.ui.screen.main
 
 import android.annotation.SuppressLint
+import android.util.Log
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
@@ -45,21 +46,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ongxeno.android.starbuttonbox.MainViewModel
 import com.ongxeno.android.starbuttonbox.data.ConnectionStatus
 import com.ongxeno.android.starbuttonbox.data.LayoutType
+import com.ongxeno.android.starbuttonbox.ui.SendMacroViewModel
 import com.ongxeno.android.starbuttonbox.ui.dialog.AddEditLayoutDialog
 import com.ongxeno.android.starbuttonbox.ui.dialog.ConnectionConfigDialog
 import com.ongxeno.android.starbuttonbox.ui.layout.AutoDragAndDropLayout
@@ -70,6 +75,8 @@ import com.ongxeno.android.starbuttonbox.ui.layout.NormalFlightLayout
 import com.ongxeno.android.starbuttonbox.ui.layout.PlaceholderLayout
 import com.ongxeno.android.starbuttonbox.utils.IconMapper
 
+fun Modifier.nonInteractive(): Modifier = this.pointerInput(Unit) {}
+
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel(),
@@ -78,6 +85,9 @@ fun MainScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val selectedLayoutIndex by viewModel.selectedLayoutIndexState.collectAsStateWithLifecycle()
     val enabledLayouts by viewModel.enabledLayoutsState.collectAsStateWithLifecycle()
+    val cachedLayoutsToRender by viewModel.cachedLayoutsToRenderState.collectAsStateWithLifecycle()
+    val currentSelectedLayoutId by viewModel.selectedLayoutIdFlow.collectAsStateWithLifecycle(initialValue = null)
+
     val showConnectionConfigDialog by viewModel.showConnectionConfigDialogState.collectAsStateWithLifecycle()
     val showMainAddLayoutDialog by viewModel.showAddLayoutDialogState.collectAsStateWithLifecycle()
     val connectionStatus by viewModel.connectionStatus.collectAsStateWithLifecycle()
@@ -112,7 +122,6 @@ fun MainScreen(
                             IconButton(
                                 onClick = { viewModel.selectLayout(index) },
                                 modifier = Modifier.size(48.dp),
-                                enabled = selectedLayoutIndex >= 0
                             ) {
                                 Icon(
                                     imageVector = IconMapper.getIconVector(layoutInfo.iconName),
@@ -136,25 +145,37 @@ fun MainScreen(
                     Spacer(modifier = Modifier.width(4.dp))
                 }
 
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                 ) {
-                    val currentLayoutInfo = enabledLayouts.getOrNull(selectedLayoutIndex)
-                        ?: enabledLayouts.firstOrNull().also {
-                            if (enabledLayouts.isNotEmpty()) {
-                                LaunchedEffect(enabledLayouts.size) { viewModel.selectLayout(0) }
+                    if (cachedLayoutsToRender.isEmpty() && enabledLayouts.isNotEmpty()) {
+                        val firstEnabledLayout = enabledLayouts.firstOrNull()
+                        if (firstEnabledLayout != null) {
+                            Log.d("MainScreen", "CachedLayoutsToRender is empty, but enabledLayouts exist. Rendering first enabled: ${firstEnabledLayout.title}")
+                            ActualLayoutContent(layoutInfo = firstEnabledLayout, mainViewModel = viewModel)
+                        } else {
+                            PlaceholderLayout("No layouts available or selected.")
+                        }
+                    } else if (cachedLayoutsToRender.isEmpty() && enabledLayouts.isEmpty()) {
+                         PlaceholderLayout("No layouts configured. Add one via Settings.")
+                    }
+                    else {
+                        cachedLayoutsToRender.forEach { layoutInfo ->
+                            key(layoutInfo.id) {
+                                val isActuallyVisible = layoutInfo.id == currentSelectedLayoutId
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer { alpha = if (isActuallyVisible) 1f else 0f }
+                                        .zIndex(if (isActuallyVisible) 1f else 0f)
+                                        .then(if (!isActuallyVisible) Modifier.nonInteractive() else Modifier)
+                                ) {
+                                    ActualLayoutContent(layoutInfo = layoutInfo, mainViewModel = viewModel)
+                                }
                             }
                         }
-
-                    when (currentLayoutInfo?.type) {
-                        LayoutType.NORMAL_FLIGHT -> NormalFlightLayout(hiltViewModel())
-                        LayoutType.FREE_FORM -> FreeFormLayout(viewModel, hiltViewModel())
-                        LayoutType.DEMO -> DemoLayout()
-                        LayoutType.AUTO_DRAG_AND_DROP -> AutoDragAndDropLayout(hiltViewModel())
-                        LayoutType.PLACEHOLDER -> PlaceholderLayout("Layout: ${currentLayoutInfo.title}")
-                        null -> PlaceholderLayout("No Layouts Enabled or Selected")
                     }
                 }
             }
@@ -176,6 +197,22 @@ fun MainScreen(
                 onConfirm = { title, iconName, _ -> viewModel.confirmAddLayout(title, iconName) }
             )
         }
+    }
+}
+
+@Composable
+private fun ActualLayoutContent(layoutInfo: LayoutInfo, mainViewModel: MainViewModel) {
+    when (layoutInfo.type) {
+        LayoutType.NORMAL_FLIGHT -> NormalFlightLayout(hiltViewModel())
+        LayoutType.FREE_FORM -> {
+            FreeFormLayout(
+                viewModel = mainViewModel,
+                sendMacroViewModel = hiltViewModel()
+            )
+        }
+        LayoutType.DEMO -> DemoLayout()
+        LayoutType.AUTO_DRAG_AND_DROP -> AutoDragAndDropLayout(hiltViewModel())
+        LayoutType.PLACEHOLDER -> PlaceholderLayout("Layout: ${layoutInfo.title}")
     }
 }
 
